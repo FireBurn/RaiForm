@@ -13,25 +13,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -45,6 +55,10 @@ fun ClientDetailsScreen(
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+
+    // State for Add Session Dialog
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newSessionName by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -73,6 +87,15 @@ fun ClientDetailsScreen(
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Session")
+            }
         }
     ) { paddingValues ->
         if (state.isLoading) {
@@ -88,17 +111,85 @@ fun ClientDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.sessions) { session ->
-                    SessionCard(session = session, onClick = {
-                        navController.navigate("active_session/${state.client?.id}/${session.id}")
-                    })
+                    SessionCard(
+                        session = session,
+                        onClick = {
+                            navController.navigate("active_session/${state.client?.id}/${session.id}")
+                        },
+                        onDelete = { viewModel.deleteSession(session) }
+                    )
                 }
+
+                // Bottom spacing for FAB
+                item { Spacer(modifier = Modifier.height(80.dp)) }
             }
+        }
+
+        // Add Session Dialog
+        if (showAddDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddDialog = false },
+                title = { Text("New Session") },
+                text = {
+                    OutlinedTextField(
+                        value = newSessionName,
+                        onValueChange = { newSessionName = it },
+                        label = { Text("Session Name (e.g. Legs)") },
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newSessionName.isNotBlank()) {
+                                viewModel.addSession(newSessionName)
+                                newSessionName = ""
+                                showAddDialog = false
+                            }
+                        }
+                    ) {
+                        Text("Create")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
+                }
+            )
         }
     }
 }
 
 @Composable
-fun SessionCard(session: Session, onClick: () -> Unit) {
+fun SessionCard(
+    session: Session,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    // Confirmation for delete
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Session?") },
+            text = { Text("Are you sure you want to remove '${session.name}'? This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -112,12 +203,11 @@ fun SessionCard(session: Session, onClick: () -> Unit) {
             modifier = Modifier
                 .padding(20.dp)
                 .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = session.name, // e.g. "PUSH"
+                    text = session.name,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary
@@ -128,20 +218,21 @@ fun SessionCard(session: Session, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Preview first 2 exercises
-                session.exercises.take(2).forEach { ex ->
-                    Text(
-                        text = "• ${ex.name}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        maxLines = 1
-                    )
-                }
             }
 
+            // Delete Button
+            IconButton(onClick = { showDeleteConfirm = true }) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
+            }
+
+            // Chevron
             Icon(
                 imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Start",
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
         }

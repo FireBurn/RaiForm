@@ -79,4 +79,27 @@ class ClientDetailsViewModel @Inject constructor(
             }
         }
     }
+
+    fun addSession(name: String) {
+        viewModelScope.launch {
+            try {
+                // Create new session object
+                val newSession = Session(name = name, exercises = emptyList())
+                // Use updateSession to save it (ID will be new, so it creates)
+                repository.updateSession(clientId, newSession)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to add session: ${e.message}") }
+            }
+        }
+    }
+
+    fun deleteSession(session: Session) {
+        viewModelScope.launch {
+            try {
+                repository.deleteSession(clientId, session.id)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to delete session: ${e.message}") }
+            }
+        }
+    }
 }

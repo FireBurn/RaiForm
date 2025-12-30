@@ -16,12 +16,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +68,10 @@ fun ActiveSessionScreen(
     // State for the Edit Dialog
     var exerciseToEdit by remember { mutableStateOf<Exercise?>(null) }
 
+    // State for Add Exercise Dialog
+    var showAddExerciseDialog by remember { mutableStateOf(false) }
+    var newExerciseName by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -99,6 +106,7 @@ fun ActiveSessionScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 1. List of Exercises
                 items(session.exercises) { exercise ->
                     ActiveExerciseCard(
                         exercise = exercise,
@@ -106,16 +114,72 @@ fun ActiveSessionScreen(
                         onEdit = { exerciseToEdit = exercise } // Open Dialog
                     )
                 }
+
+                // 2. Add Exercise Button at bottom
+                item {
+                    Button(
+                        onClick = { showAddExerciseDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("ADD EXERCISE", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
 
-        // Show Dialog if an exercise is selected
+        // --- Dialogs ---
+
+        // 1. Add Exercise Dialog
+        if (showAddExerciseDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddExerciseDialog = false },
+                title = { Text("Add Exercise") },
+                text = {
+                    OutlinedTextField(
+                        value = newExerciseName,
+                        onValueChange = { newExerciseName = it },
+                        label = { Text("Exercise Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        if (newExerciseName.isNotBlank()) {
+                            viewModel.addExercise(newExerciseName)
+                            newExerciseName = "" // Reset
+                            showAddExerciseDialog = false
+                        }
+                    }) {
+                        Text("ADD")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddExerciseDialog = false }) { Text("CANCEL") }
+                }
+            )
+        }
+
+        // 2. Edit / Delete Dialog
         if (exerciseToEdit != null) {
             EditExerciseDialog(
                 exercise = exerciseToEdit!!,
                 onDismiss = { exerciseToEdit = null },
                 onConfirm = { weight, sets, reps ->
                     viewModel.updateExerciseValues(exerciseToEdit!!.id, weight, sets, reps)
+                    exerciseToEdit = null
+                },
+                onDelete = {
+                    viewModel.deleteExercise(exerciseToEdit!!.id)
                     exerciseToEdit = null
                 }
             )
@@ -198,57 +262,95 @@ fun ActiveExerciseCard(
 fun EditExerciseDialog(
     exercise: Exercise,
     onDismiss: () -> Unit,
-    onConfirm: (Double, Int, Int) -> Unit
+    onConfirm: (Double, Int, Int) -> Unit,
+    onDelete: () -> Unit
 ) {
     var weightText by remember { mutableStateOf(if (exercise.isBodyweight) "0" else exercise.weight.toString()) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Update: ${exercise.name}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!exercise.isBodyweight) {
-                    OutlinedTextField(
-                        value = weightText,
-                        onValueChange = { weightText = it },
-                        label = { Text("Weight (kg)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
+    // Internal state to switch between Edit Mode and Delete Confirmation Mode
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        // --- DELETE CONFIRMATION ---
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Remove Exercise?") },
+            text = { Text("Are you sure you want to remove '${exercise.name}' from this workout?") },
+            confirmButton = {
+                Button(
+                    onClick = { onDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("REMOVE")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = setsText,
-                        onValueChange = { setsText = it },
-                        label = { Text("Sets") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = repsText,
-                        onValueChange = { repsText = it },
-                        label = { Text("Reps") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL") }
+            }
+        )
+    } else {
+        // --- EDIT MODE ---
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Update: ${exercise.name}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!exercise.isBodyweight) {
+                        OutlinedTextField(
+                            value = weightText,
+                            onValueChange = { weightText = it },
+                            label = { Text("Weight (kg)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = setsText,
+                            onValueChange = { setsText = it },
+                            label = { Text("Sets") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = repsText,
+                            onValueChange = { repsText = it },
+                            label = { Text("Reps") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val w = weightText.toDoubleOrNull() ?: 0.0
+                    val s = setsText.toIntOrNull() ?: 0
+                    val r = repsText.toIntOrNull() ?: 0
+                    onConfirm(w, s, r)
+                }) {
+                    Text("SAVE")
+                }
+            },
+            dismissButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Delete Icon Button
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    TextButton(onClick = onDismiss) { Text("CANCEL") }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val w = weightText.toDoubleOrNull() ?: 0.0
-                val s = setsText.toIntOrNull() ?: 0
-                val r = repsText.toIntOrNull() ?: 0
-                onConfirm(w, s, r)
-            }) {
-                Text("SAVE")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("CANCEL") }
-        }
-    )
+        )
+    }
 }
 
 @Composable

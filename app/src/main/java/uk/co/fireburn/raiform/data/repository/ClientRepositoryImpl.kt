@@ -125,4 +125,12 @@ class ClientRepositoryImpl @Inject constructor(
             .set(session) // Overwrites the session with new exercise data
             .await()
     }
+
+    override suspend fun deleteSession(clientId: String, sessionId: String) {
+        clientsCollection.document(clientId)
+            .collection("sessions")
+            .document(sessionId)
+            .delete()
+            .await()
+    }
 }

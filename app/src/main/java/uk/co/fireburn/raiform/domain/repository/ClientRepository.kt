@@ -27,7 +27,6 @@ interface ClientRepository {
     suspend fun archiveClient(clientId: String)
 
     /**
-     * THE IMPORT FUNCTION:
      * Saves a new client AND their schedule in one go.
      */
     suspend fun saveClientWithSessions(client: Client, sessions: List<Session>)
@@ -41,4 +40,9 @@ interface ClientRepository {
      * Updates a single session (e.g., ticking off exercises).
      */
     suspend fun updateSession(clientId: String, session: Session)
+
+    /**
+     * Deletes a single session
+     */
+    suspend fun deleteSession(clientId: String, sessionId: String)
 }
