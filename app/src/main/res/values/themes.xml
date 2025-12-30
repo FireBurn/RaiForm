@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Base application theme.
+        We use Theme.SplashScreen to handle the splash screen on Android 12+
+        and the RaiFormTheme in Compose handles the in-app styling.
+    -->
+    <style name="Theme.RaiForm" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
