@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.ClientRepository
+import java.util.Locale
 import javax.inject.Inject
 
 data class ActiveSessionUiState(
@@ -37,7 +38,6 @@ class ActiveSessionViewModel @Inject constructor(
 
     private fun loadSession() {
         viewModelScope.launch {
-            // We listen to the stream so updates (even from other devices) reflect instantly
             repository.getSessionsForClient(clientId).collect { sessions ->
                 val activeSession = sessions.find { it.id == sessionId }
                 _uiState.update { it.copy(session = activeSession, isLoading = false) }
@@ -47,8 +47,6 @@ class ActiveSessionViewModel @Inject constructor(
 
     fun toggleExerciseDone(exerciseId: String) {
         val currentSession = _uiState.value.session ?: return
-
-        // Create updated list of exercises
         val updatedExercises = currentSession.exercises.map { exercise ->
             if (exercise.id == exerciseId) {
                 exercise.copy(isDone = !exercise.isDone)
@@ -56,14 +54,8 @@ class ActiveSessionViewModel @Inject constructor(
                 exercise
             }
         }
-
-        // Create updated session
         val updatedSession = currentSession.copy(exercises = updatedExercises)
-
-        // Optimistically update UI
         _uiState.update { it.copy(session = updatedSession) }
-
-        // Save to Database
         saveSession(updatedSession)
     }
 
@@ -73,13 +65,36 @@ class ActiveSessionViewModel @Inject constructor(
         }
     }
 
-    fun updateExerciseValues(exerciseId: String, name: String, newWeight: Double, newSets: Int, newReps: Int) {
+    fun addExercise(name: String) {
+        val currentSession = _uiState.value.session ?: return
+
+        val newExercise = Exercise(
+            name = name.toTitleCase(),
+            weight = 0.0,
+            sets = 3,
+            reps = 10
+        )
+
+        val updatedList = currentSession.exercises + newExercise
+        val updatedSession = currentSession.copy(exercises = updatedList)
+
+        _uiState.update { it.copy(session = updatedSession) }
+        saveSession(updatedSession)
+    }
+
+    fun updateExerciseValues(
+        exerciseId: String,
+        name: String,
+        newWeight: Double,
+        newSets: Int,
+        newReps: Int
+    ) {
         val currentSession = _uiState.value.session ?: return
 
         val updatedExercises = currentSession.exercises.map { exercise ->
             if (exercise.id == exerciseId) {
                 exercise.copy(
-                    name = name,
+                    name = name.toTitleCase(),
                     weight = newWeight,
                     sets = newSets,
                     reps = newReps
@@ -94,30 +109,17 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
-    fun addExercise(name: String) {
+    fun deleteExercise(exerciseId: String) {
         val currentSession = _uiState.value.session ?: return
-
-        val newExercise = Exercise(
-            name = name,
-            weight = 0.0,
-            sets = 3, // Default values
-            reps = 10
-        )
-
-        val updatedList = currentSession.exercises + newExercise
+        val updatedList = currentSession.exercises.filter { it.id != exerciseId }
         val updatedSession = currentSession.copy(exercises = updatedList)
-
         _uiState.update { it.copy(session = updatedSession) }
         saveSession(updatedSession)
     }
 
-    fun deleteExercise(exerciseId: String) {
-        val currentSession = _uiState.value.session ?: return
-
-        val updatedList = currentSession.exercises.filter { it.id != exerciseId }
-        val updatedSession = currentSession.copy(exercises = updatedList)
-
-        _uiState.update { it.copy(session = updatedSession) }
-        saveSession(updatedSession)
+    private fun String.toTitleCase(): String {
+        return this.lowercase().split(" ").joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        }
     }
 }

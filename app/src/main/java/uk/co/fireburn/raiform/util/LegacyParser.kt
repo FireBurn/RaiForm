@@ -2,6 +2,7 @@ package uk.co.fireburn.raiform.util
 
 import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
+import java.util.Locale
 
 object LegacyParser {
 
@@ -32,8 +33,8 @@ object LegacyParser {
 
         if (lines.isEmpty()) throw IllegalArgumentException("Empty text provided")
 
-        // 1. First line is always Client Name
-        val clientName = lines.first().trim()
+        // 1. First line is always Client Name (Apply Title Case)
+        val clientName = lines.first().trim().toTitleCase()
 
         val sessions = mutableListOf<Session>()
         var currentSessionName = "Uncategorized"
@@ -44,8 +45,7 @@ object LegacyParser {
             val line = lines[i].trim()
             val lineUpper = line.uppercase()
 
-            // FIX: Check if line STARTS with a keyword AND is not an exercise (no dash)
-            // This handles "LOWER Monday" or "PUSH (Heavy)"
+            // Check if line STARTS with a keyword AND is not an exercise
             val isHeader = SESSION_KEYWORDS.any { keyword ->
                 lineUpper.startsWith(keyword)
             } && !line.contains(" - ")
@@ -60,8 +60,8 @@ object LegacyParser {
                         )
                     )
                 }
-                // Start new session (Use the full line as the name, e.g., "LOWER Monday")
-                currentSessionName = line
+                // Start new session (Apply Title Case)
+                currentSessionName = line.toTitleCase()
                 currentExercises = mutableListOf()
             } else {
                 // Try to parse as Exercise
@@ -89,12 +89,19 @@ object LegacyParser {
         val maintainWeight = maintainStr.equals("X", ignoreCase = true)
 
         return Exercise(
-            name = name.trim(),
+            name = name.trim().toTitleCase(), // Apply Title Case
             weight = weight,
             isBodyweight = isBodyweight,
             sets = setsStr.toIntOrNull() ?: 0,
             reps = repsStr.toIntOrNull() ?: 0,
             maintainWeight = maintainWeight
         )
+    }
+
+    // Helper Extension
+    private fun String.toTitleCase(): String {
+        return this.lowercase().split(" ").joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+        }
     }
 }

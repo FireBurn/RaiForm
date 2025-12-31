@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.repository.ClientRepository
+import java.util.Locale
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -55,11 +56,10 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Add a client manually
     fun addClient(name: String) {
         viewModelScope.launch {
             try {
-                val newClient = Client(name = name)
+                val newClient = Client(name = name.toTitleCase())
                 repository.saveClient(newClient)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Error adding client: ${e.message}") }
@@ -67,11 +67,10 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Rename existing client
     fun updateClientName(client: Client, newName: String) {
         viewModelScope.launch {
             try {
-                val updatedClient = client.copy(name = newName)
+                val updatedClient = client.copy(name = newName.toTitleCase())
                 repository.saveClient(updatedClient)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Error updating client: ${e.message}") }
@@ -83,11 +82,15 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.archiveClient(client.id)
-                // No need to manually refresh; the Flow will emit the new list automatically!
             } catch (e: Exception) {
-                // Ideally show a Snackbar event here
                 _uiState.update { it.copy(error = "Could not archive: ${e.message}") }
             }
+        }
+    }
+
+    private fun String.toTitleCase(): String {
+        return this.lowercase().split(" ").joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
         }
     }
 }

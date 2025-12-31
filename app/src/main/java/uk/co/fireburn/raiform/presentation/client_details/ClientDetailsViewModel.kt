@@ -13,13 +13,14 @@ import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.ClientRepository
+import java.util.Locale
 import javax.inject.Inject
 
 data class ClientDetailsUiState(
     val client: Client? = null,
     val sessions: List<Session> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null // Added error state
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -42,10 +43,7 @@ class ClientDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             try {
-                // 1. Fetch Client Details (Safely)
-                // If offline and not cached, this might throw. We catch it below.
                 val client = repository.getClientById(clientId)
-
                 if (client == null) {
                     _uiState.update { it.copy(isLoading = false, error = "Client not found") }
                     return@launch
@@ -53,8 +51,6 @@ class ClientDetailsViewModel @Inject constructor(
 
                 _uiState.update { it.copy(client = client) }
 
-                // 2. Observe Sessions (Real-time Flow)
-                // Flows are usually safer, but we catch generic errors just in case
                 repository.getSessionsForClient(clientId)
                     .catch { e ->
                         _uiState.update { it.copy(error = "Error loading sessions: ${e.message}") }
@@ -69,7 +65,6 @@ class ClientDetailsViewModel @Inject constructor(
                     }
 
             } catch (e: Exception) {
-                // This catches the UnknownHostException (No Internet) crash
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -83,9 +78,7 @@ class ClientDetailsViewModel @Inject constructor(
     fun addSession(name: String) {
         viewModelScope.launch {
             try {
-                // Create new session object
-                val newSession = Session(name = name, exercises = emptyList())
-                // Use updateSession to save it (ID will be new, so it creates)
+                val newSession = Session(name = name.toTitleCase(), exercises = emptyList())
                 repository.updateSession(clientId, newSession)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to add session: ${e.message}") }
@@ -93,11 +86,10 @@ class ClientDetailsViewModel @Inject constructor(
         }
     }
 
-    // NEW: Rename Session
     fun renameSession(session: Session, newName: String) {
         viewModelScope.launch {
             try {
-                val updatedSession = session.copy(name = newName)
+                val updatedSession = session.copy(name = newName.toTitleCase())
                 repository.updateSession(clientId, updatedSession)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to rename: ${e.message}") }
@@ -112,6 +104,12 @@ class ClientDetailsViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to delete session: ${e.message}") }
             }
+        }
+    }
+
+    private fun String.toTitleCase(): String {
+        return this.lowercase().split(" ").joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
         }
     }
 }

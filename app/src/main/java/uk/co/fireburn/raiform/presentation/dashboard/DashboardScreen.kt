@@ -72,7 +72,7 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsState()
 
     // --- Local Dialog States ---
-    
+
     // 1. Add Client Dialog State
     var showAddClientDialog by remember { mutableStateOf(false) }
     var newClientName by remember { mutableStateOf("") }
@@ -175,9 +175,9 @@ fun DashboardScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        
+
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         // Link to Smart Import
                         TextButton(
                             onClick = {
@@ -186,7 +186,11 @@ fun DashboardScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.Bolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Use Smart Import instead")
                         }
@@ -212,7 +216,7 @@ fun DashboardScreen(
         // 2. Rename Client Dialog
         if (clientToRename != null) {
             var renameText by remember { mutableStateOf(clientToRename!!.name) }
-            
+
             AlertDialog(
                 onDismissRequest = { clientToRename = null },
                 title = { Text("Rename Client") },
@@ -376,7 +380,7 @@ fun ClientCard(
                             )
                         }
                     )
-                    
+
                     // 2. Archive Option
                     DropdownMenuItem(
                         text = {
