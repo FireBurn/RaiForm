@@ -52,7 +52,17 @@ class ClientDetailsViewModel @Inject constructor(
 
             // 2. Get Sessions
             repository.getSessionsForClient(clientId).collect { sessions ->
-                val processedSessions = checkAndPerformWeeklyReset(client, sessions)
+                // Sort sessions: Scheduled items first (Mon->Sun), then by time, then unscheduled
+                val sortedSessions = sessions.sortedWith(
+                    compareBy(
+                        { it.scheduledDay ?: 8 },     // Days 1-7 first, null (8) last
+                        { it.scheduledHour ?: 25 },   // Hours 0-23 first, null (25) last
+                        { it.scheduledMinute ?: 61 }, // Minutes 0-59 first
+                        { it.name }                   // Fallback to name
+                    )
+                )
+
+                val processedSessions = checkAndPerformWeeklyReset(client, sortedSessions)
                 _uiState.update { it.copy(sessions = processedSessions, isLoading = false) }
             }
         }

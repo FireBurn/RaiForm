@@ -16,7 +16,8 @@ data class Session(
     val lastResetTimestamp: Long = 0L,
 
     // Fix for Firestore Warning: Explicitly map property name
-    @get:PropertyName("skippedThisWeek")
+    // CHANGED: Removed 'get:' target to ensure it applies to the constructor parameter for deserialization
+    @PropertyName("skippedThisWeek")
     val isSkippedThisWeek: Boolean = false,
 
     val tempRescheduleTimestamp: Long? = null

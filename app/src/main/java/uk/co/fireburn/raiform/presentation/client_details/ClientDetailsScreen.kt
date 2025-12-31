@@ -85,10 +85,13 @@ fun ClientDetailsScreen(
     // Reorder State
     val reorderState = rememberReorderableLazyListState(
         onMove = { from, to ->
-            val list = state.sessions.toMutableList()
-            val item = list.removeAt(from.index)
-            list.add(to.index, item)
-            viewModel.onReorderSessions(list)
+            val list = viewModel.uiState.value.sessions.toMutableList()
+
+            if (from.index in list.indices && to.index in list.indices) {
+                val item = list.removeAt(from.index)
+                list.add(to.index, item)
+                viewModel.onReorderSessions(list)
+            }
         }
     )
 
