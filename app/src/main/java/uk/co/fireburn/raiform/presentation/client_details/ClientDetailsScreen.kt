@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack // UPDATED IMPORT
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -58,11 +58,8 @@ fun ClientDetailsScreen(
     val state by viewModel.uiState.collectAsState()
 
     // --- Local UI States ---
-    // 1. Add Session Dialog State
     var showAddDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
-
-    // 2. Rename Session Dialog State
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
     Scaffold(
@@ -84,7 +81,11 @@ fun ClientDetailsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        // UPDATED ICON USAGE
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -119,27 +120,17 @@ fun ClientDetailsScreen(
                     SessionCard(
                         session = session,
                         onClick = {
-                            // Navigate to Active Session Mode
                             navController.navigate("active_session/${state.client?.id}/${session.id}")
                         },
-                        onDelete = {
-                            viewModel.deleteSession(session)
-                        },
-                        onEdit = {
-                            // Open Rename Dialog
-                            sessionToRename = session
-                        }
+                        onDelete = { viewModel.deleteSession(session) },
+                        onEdit = { sessionToRename = session }
                     )
                 }
-
-                // Extra space at bottom for FAB
                 item { Spacer(modifier = Modifier.height(80.dp)) }
             }
         }
 
-        // --- DIALOGS ---
-
-        // 1. Add Session Dialog
+        // --- DIALOGS (Add & Rename) ---
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
@@ -153,17 +144,13 @@ fun ClientDetailsScreen(
                     )
                 },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            if (newSessionName.isNotBlank()) {
-                                viewModel.addSession(newSessionName)
-                                newSessionName = ""
-                                showAddDialog = false
-                            }
+                    Button(onClick = {
+                        if (newSessionName.isNotBlank()) {
+                            viewModel.addSession(newSessionName)
+                            newSessionName = ""
+                            showAddDialog = false
                         }
-                    ) {
-                        Text("Create")
-                    }
+                    }) { Text("Create") }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
@@ -171,10 +158,8 @@ fun ClientDetailsScreen(
             )
         }
 
-        // 2. Rename Session Dialog
         if (sessionToRename != null) {
             var renameText by remember { mutableStateOf(sessionToRename!!.name) }
-
             AlertDialog(
                 onDismissRequest = { sessionToRename = null },
                 title = { Text("Rename Session") },
@@ -192,9 +177,7 @@ fun ClientDetailsScreen(
                             viewModel.renameSession(sessionToRename!!, renameText)
                             sessionToRename = null
                         }
-                    }) {
-                        Text("Save")
-                    }
+                    }) { Text("Save") }
                 },
                 dismissButton = {
                     TextButton(onClick = { sessionToRename = null }) { Text("Cancel") }
@@ -211,7 +194,6 @@ fun SessionCard(
     onDelete: () -> Unit,
     onEdit: () -> Unit
 ) {
-    // Local state for delete confirmation inside the card
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
@@ -221,14 +203,9 @@ fun SessionCard(
             text = { Text("Are you sure you want to remove '${session.name}'? This cannot be undone.") },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onDelete()
-                        showDeleteConfirm = false
-                    },
+                    onClick = { onDelete(); showDeleteConfirm = false },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete")
-                }
+                ) { Text("Delete") }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
@@ -240,9 +217,7 @@ fun SessionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
@@ -265,28 +240,22 @@ fun SessionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            // Edit Name Button
             IconButton(onClick = onEdit) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    Icons.Default.Edit,
                     contentDescription = "Edit Name",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            // Delete Button
             IconButton(onClick = { showDeleteConfirm = true }) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
+                    Icons.Default.Delete,
                     contentDescription = "Delete",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
-
-            // Navigation Chevron
             Icon(
-                imageVector = Icons.Default.ChevronRight,
+                Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )

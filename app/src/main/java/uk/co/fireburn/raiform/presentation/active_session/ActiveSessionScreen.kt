@@ -16,8 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -85,7 +85,11 @@ fun ActiveSessionScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        // FIX: Use AutoMirrored icon to avoid deprecation warning
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -295,10 +299,10 @@ fun EditExerciseDialog(
         // --- EDIT MODE ---
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Update: ${exercise.name}") },
+            title = { Text("Edit Details") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 1. Name Field
+                    // 1. Name Input
                     OutlinedTextField(
                         value = nameText,
                         onValueChange = { nameText = it },
@@ -306,6 +310,7 @@ fun EditExerciseDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // 2. Weight Input (if not bodyweight)
                     if (!exercise.isBodyweight) {
                         OutlinedTextField(
                             value = weightText,
@@ -314,6 +319,8 @@ fun EditExerciseDialog(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                         )
                     }
+
+                    // 3. Sets & Reps
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = setsText,

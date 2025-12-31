@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack // UPDATED IMPORT
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
@@ -59,10 +59,9 @@ fun ImportScreen(
     val state by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Handle "Save Success" navigation
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
-            navController.popBackStack() // Go back to Dashboard
+            navController.popBackStack()
         }
     }
 
@@ -72,7 +71,11 @@ fun ImportScreen(
                 title = { Text("Smart Import") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        // UPDATED ICON USAGE
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -99,20 +102,20 @@ fun ImportScreen(
             }
         }
     ) { paddingValues ->
+        // ... rest of content remains identical ...
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            // 1. Input Area
             OutlinedTextField(
                 value = state.rawText,
                 onValueChange = viewModel::onRawTextChanged,
                 label = { Text("Paste Google Keep Note Here") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(if (state.parsedSessions.isEmpty()) 1f else 0.4f), // Shrink if preview is active
+                    .weight(if (state.parsedSessions.isEmpty()) 1f else 0.4f),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
@@ -120,15 +123,9 @@ fun ImportScreen(
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
             )
-
             Spacer(modifier = Modifier.height(16.dp))
-
-            // 2. Parse Button
             Button(
-                onClick = {
-                    keyboardController?.hide()
-                    viewModel.onParseClicked()
-                },
+                onClick = { keyboardController?.hide(); viewModel.onParseClicked() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state.rawText.isNotBlank()
             ) {
@@ -136,7 +133,6 @@ fun ImportScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("ANALYZE TEXT")
             }
-
             if (state.error != null) {
                 Text(
                     text = state.error!!,
@@ -144,8 +140,6 @@ fun ImportScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
-
-            // 3. Preview Area (Visible only after parsing)
             if (state.parsedSessions.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
@@ -154,14 +148,11 @@ fun ImportScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 80.dp) // Space for FAB
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
-                    items(state.parsedSessions) { session ->
-                        SessionPreviewCard(session)
-                    }
+                    items(state.parsedSessions) { session -> SessionPreviewCard(session) }
                 }
             }
         }
@@ -184,10 +175,7 @@ fun SessionPreviewCard(session: Session) {
                 color = MaterialTheme.colorScheme.secondary
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            session.exercises.forEach { exercise ->
-                ExercisePreviewRow(exercise)
-            }
+            session.exercises.forEach { exercise -> ExercisePreviewRow(exercise) }
         }
     }
 }
