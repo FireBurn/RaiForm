@@ -18,9 +18,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -85,7 +87,6 @@ fun ActiveSessionScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        // FIX: Use AutoMirrored icon to avoid deprecation warning
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
@@ -115,7 +116,8 @@ fun ActiveSessionScreen(
                     ActiveExerciseCard(
                         exercise = exercise,
                         onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                        onEdit = { exerciseToEdit = exercise } // Open Dialog
+                        onEdit = { exerciseToEdit = exercise }, // Open Dialog
+                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
                     )
                 }
 
@@ -195,7 +197,8 @@ fun ActiveSessionScreen(
 fun ActiveExerciseCard(
     exercise: Exercise,
     onToggle: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onToggleMaintain: () -> Unit
 ) {
     val cardColor = if (exercise.isDone)
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -250,6 +253,29 @@ fun ActiveExerciseCard(
                         isActive = !exercise.isDone
                     )
                     Spacer(modifier = Modifier.weight(1f))
+
+                    // --- Maintain Weight Toggle ---
+                    IconButton(onClick = onToggleMaintain) {
+                        if (exercise.maintainWeight) {
+                            // Currently Maintaining -> Pause Symbol
+                            Icon(
+                                Icons.Default.Pause,
+                                contentDescription = "Maintain Weight",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        } else {
+                            // Currently Progressing -> Up Arrow
+                            Icon(
+                                Icons.Default.ArrowUpward,
+                                contentDescription = "Increase Weight",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    // Edit Icon
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = "Edit",

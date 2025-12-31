@@ -59,6 +59,21 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
+    // NEW: Toggle Maintain Weight status
+    fun toggleMaintainWeight(exerciseId: String) {
+        val currentSession = _uiState.value.session ?: return
+        val updatedExercises = currentSession.exercises.map { exercise ->
+            if (exercise.id == exerciseId) {
+                exercise.copy(maintainWeight = !exercise.maintainWeight)
+            } else {
+                exercise
+            }
+        }
+        val updatedSession = currentSession.copy(exercises = updatedExercises)
+        _uiState.update { it.copy(session = updatedSession) }
+        saveSession(updatedSession)
+    }
+
     private fun saveSession(session: Session) {
         viewModelScope.launch {
             repository.updateSession(clientId, session)
