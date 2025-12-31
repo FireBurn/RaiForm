@@ -1,6 +1,7 @@
 package uk.co.fireburn.raiform.presentation.components
 
 import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ fun DartboardClock(
     val errorColor = MaterialTheme.colorScheme.error // Red for taken
     val availableColor = Color.Green.copy(alpha = 0.3f)
     val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = MaterialTheme.colorScheme.surface // For bullseye fill
     val textColor = MaterialTheme.colorScheme.onSurface
 
     Box(
@@ -52,34 +54,30 @@ fun DartboardClock(
                         val center = Offset(width / 2, height / 2)
                         val radius = min(width, height) / 2
 
+                        // Define Bullseye Radius (Dead zone for clicks)
+                        val innerRadius = radius * 0.6f
+                        val bullseyeRadius = innerRadius * 0.35f
+
                         val dx = tapOffset.x - center.x
                         val dy = tapOffset.y - center.y
                         val dist = sqrt(dx * dx + dy * dy)
 
-                        // Ignore center dead zone and outside touches
-                        if (dist > radius || dist < radius * 0.1f) return@detectTapGestures
+                        // Ignore center dead zone (Bullseye) and outside touches
+                        if (dist > radius || dist < bullseyeRadius) return@detectTapGestures
 
                         // 1. Calculate Angle in Degrees (0 at 12 o'clock, clockwise)
-                        // standard atan2 returns angle from X axis (3 o'clock).
-                        // We rotate it 90 degrees to make 12 o'clock 0.
                         var angleDeg =
                             Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
-                        if (angleDeg < 0) angleDeg += 360f // Normalize to 0-360
+                        if (angleDeg < 0) angleDeg += 360f
 
                         // 2. Map to Segment Index (0-11)
-                        // Each segment is 30 degrees.
-                        // Segment 0 (12 o'clock) is centered at 0 deg, spanning 345 to 15.
-                        // We shift by +15 so the division floors correctly.
-                        // (350 + 15) % 360 = 5 / 30 = 0
-                        // (10 + 15) % 360 = 25 / 30 = 0
-                        // (20 + 15) % 360 = 35 / 30 = 1 (1 o'clock)
                         val segmentIndex = ((angleDeg + 15f) % 360f / 30f).toInt()
 
                         // 3. Determine Ring (Inner=AM, Outer=PM)
                         val isOuterRing = dist > (radius * 0.6f)
 
                         // 4. Calculate Final Hour (0-23)
-                        val rawHour = segmentIndex % 12 // Ensure 0-11 range
+                        val rawHour = segmentIndex % 12
 
                         val finalHour = if (isOuterRing) {
                             // Outer Ring (PM): 12, 1, 2... 11 -> 12, 13, 14... 23
@@ -98,15 +96,13 @@ fun DartboardClock(
             val center = Offset(size.width / 2, size.height / 2)
             val radius = min(size.width, size.height) / 2
             val innerRadius = radius * 0.6f
+            val bullseyeRadius = innerRadius * 0.35f
 
             // --- DRAW SECTORS ---
             for (i in 0 until 12) {
-                // Drawing starts from 3 o'clock (0 deg) in standard Compose Canvas.
-                // 12 o'clock is -90 deg.
-                // Center the wedge: start at -90 - 15 + (i*30)
                 val startAngle = -90f - 15f + (i * 30f)
 
-                // 1. Draw Outer Sector (PM)
+                // 1. Outer Sector (PM)
                 val pmHour = if (i == 0) 12 else i + 12
                 val isPMTaken = takenHours.contains(pmHour)
                 val isPMSelected = selectedHour == pmHour
@@ -126,7 +122,7 @@ fun DartboardClock(
                     size = Size(radius * 2, radius * 2)
                 )
 
-                // 2. Draw Inner Sector (AM)
+                // 2. Inner Sector (AM)
                 val amHour = i
                 val isAMTaken = takenHours.contains(amHour)
                 val isAMSelected = selectedHour == amHour
@@ -148,17 +144,16 @@ fun DartboardClock(
             }
 
             // --- DRAW GRID LINES ---
-            drawCircle(
-                color = surfaceColor,
-                radius = radius,
-                style = Stroke(width = 4.dp.toPx())
-            )
+            // Outer Border
+            drawCircle(color = surfaceColor, radius = radius, style = Stroke(width = 4.dp.toPx()))
+            // Middle Divider
             drawCircle(
                 color = surfaceColor,
                 radius = innerRadius,
                 style = Stroke(width = 4.dp.toPx())
             )
 
+            // Radial Lines
             for (i in 0 until 12) {
                 val angleRad = Math.toRadians((-90 - 15 + i * 30).toDouble())
                 val endX = center.x + radius * cos(angleRad).toFloat()
@@ -172,40 +167,78 @@ fun DartboardClock(
                 )
             }
 
-            // --- DRAW NUMBERS ---
+            // --- DRAW BULLSEYE (AM Indicator) ---
+            drawCircle(
+                color = backgroundColor,
+                radius = bullseyeRadius
+            )
+            drawCircle(
+                color = surfaceColor,
+                radius = bullseyeRadius,
+                style = Stroke(width = 4.dp.toPx())
+            )
+
+            // --- DRAW TEXT ---
             drawIntoCanvas { canvas ->
-                val paint = Paint().apply {
-                    textSize = 40.dp.toPx()
+                // Paint for PM Numbers (Outer)
+                val pmPaint = Paint().apply {
+                    textSize = 34.dp.toPx() // Standard size
                     color = textColor.toArgb()
                     textAlign = Paint.Align.CENTER
                     isFakeBoldText = true
                 }
-                val innerPaint = Paint().apply {
-                    textSize = 28.dp.toPx()
+
+                // Paint for AM Numbers (Inner) - SMALLER
+                val amPaint = Paint().apply {
+                    textSize = 24.dp.toPx() // Smaller as requested
                     color = textColor.toArgb()
                     textAlign = Paint.Align.CENTER
+                    isFakeBoldText = false
                 }
 
+                // Paint for AM/PM Labels - SMALLER
+                val labelPaint = Paint().apply {
+                    textSize = 18.dp.toPx() // Smaller label size
+                    color = primaryColor.toArgb()
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+
+                // Draw "AM" in Bullseye
+                val amY = center.y - (labelPaint.descent() + labelPaint.ascent()) / 2
+                canvas.nativeCanvas.drawText("AM", center.x, amY, labelPaint)
+
                 for (i in 0 until 12) {
-                    // Text is centered at the "middle" of the wedge
                     val angleRad = Math.toRadians((-90 + i * 30).toDouble())
+                    val displayNum = if (i == 0) 12 else i
 
-                    // PM Numbers
-                    val pmRadius = radius * 0.8f
+                    // --- Outer Ring (PM) ---
+                    // Moved slightly inward (0.75f) to give room for PM label
+                    val pmRadius = radius * 0.75f
                     val pmX = center.x + pmRadius * cos(angleRad).toFloat()
-                    val pmY = center.y + pmRadius * sin(angleRad).toFloat() + (paint.textSize / 3)
+                    val pmY =
+                        center.y + pmRadius * sin(angleRad).toFloat() - (pmPaint.ascent() + pmPaint.descent()) / 2
 
-                    val pmText = if (i == 0) "12" else (i + 12).toString()
-                    canvas.nativeCanvas.drawText(pmText, pmX, pmY, paint)
+                    canvas.nativeCanvas.drawText(displayNum.toString(), pmX, pmY, pmPaint)
 
-                    // AM Numbers
+                    // Special Label: "PM" above the 12
+                    if (i == 0) {
+                        // Positioned near the outer edge (0.92f)
+                        val pmLabelRadius = radius * 0.92f
+                        val pmLabelX = center.x + pmLabelRadius * cos(angleRad).toFloat()
+                        val pmLabelY =
+                            center.y + pmLabelRadius * sin(angleRad).toFloat() - (labelPaint.ascent() + labelPaint.descent()) / 2
+
+                        canvas.nativeCanvas.drawText("PM", pmLabelX, pmLabelY, labelPaint)
+                    }
+
+                    // --- Inner Ring (AM Numbers) ---
                     val amRadius = innerRadius * 0.7f
                     val amX = center.x + amRadius * cos(angleRad).toFloat()
                     val amY =
-                        center.y + amRadius * sin(angleRad).toFloat() + (innerPaint.textSize / 3)
+                        center.y + amRadius * sin(angleRad).toFloat() - (amPaint.ascent() + amPaint.descent()) / 2
 
-                    val amText = i.toString()
-                    canvas.nativeCanvas.drawText(amText, amX, amY, innerPaint)
+                    canvas.nativeCanvas.drawText(displayNum.toString(), amX, amY, amPaint)
                 }
             }
         }
