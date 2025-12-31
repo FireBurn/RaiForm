@@ -307,7 +307,7 @@ fun SessionCard(
                         leadingIcon = { Icon(Icons.Default.Schedule, null) }
                     )
                     DropdownMenuItem(
-                        text = { Text(if (session.isSkippedThisWeek) "Restore Week" else "Cancel Week") },
+                        text = { Text(if (session.isSkippedThisWeek) "Restore" else "Cancel") },
                         onClick = { showMenu = false; onAction(SessionAction.ToggleSkip) },
                         leadingIcon = { Icon(Icons.Default.Cancel, null) }
                     )
