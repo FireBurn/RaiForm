@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -216,7 +215,7 @@ fun ActiveExerciseCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox (Click to toggle done)
+            // 1. Checkbox (Left)
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (exercise.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -228,7 +227,7 @@ fun ActiveExerciseCard(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Text Info (Click to Edit)
+            // 2. Text Info (Center - Clickable)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -252,35 +251,26 @@ fun ActiveExerciseCard(
                         text = "${exercise.sets} x ${exercise.reps}",
                         isActive = !exercise.isDone
                     )
-                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
 
-                    // --- Maintain Weight Toggle ---
-                    IconButton(onClick = onToggleMaintain) {
-                        if (exercise.maintainWeight) {
-                            // Currently Maintaining -> Pause Symbol
-                            Icon(
-                                Icons.Default.Pause,
-                                contentDescription = "Maintain Weight",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else {
-                            // Currently Progressing -> Up Arrow
-                            Icon(
-                                Icons.Default.ArrowUpward,
-                                contentDescription = "Increase Weight",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
-                    // Edit Icon
+            // 3. Maintain Weight Toggle (Right - Same height as checkbox)
+            IconButton(onClick = onToggleMaintain) {
+                if (exercise.maintainWeight) {
+                    // Currently Maintaining -> Pause Symbol (Red)
                     Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(16.dp)
+                        Icons.Default.Pause,
+                        contentDescription = "Maintain Weight",
+                        tint = Color.Red, // <--- RED
+                        modifier = Modifier.size(32.dp)
+                    )
+                } else {
+                    // Currently Progressing -> Up Arrow (Green)
+                    Icon(
+                        Icons.Default.ArrowUpward,
+                        contentDescription = "Increase Weight",
+                        tint = Color.Green, // <--- GREEN
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
@@ -300,11 +290,9 @@ fun EditExerciseDialog(
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
 
-    // Internal state to switch between Edit Mode and Delete Confirmation Mode
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
-        // --- DELETE CONFIRMATION ---
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Remove Exercise?") },
@@ -322,13 +310,11 @@ fun EditExerciseDialog(
             }
         )
     } else {
-        // --- EDIT MODE ---
         AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("Edit Details") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 1. Name Input
                     OutlinedTextField(
                         value = nameText,
                         onValueChange = { nameText = it },
@@ -336,7 +322,6 @@ fun EditExerciseDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // 2. Weight Input (if not bodyweight)
                     if (!exercise.isBodyweight) {
                         OutlinedTextField(
                             value = weightText,
@@ -346,7 +331,6 @@ fun EditExerciseDialog(
                         )
                     }
 
-                    // 3. Sets & Reps
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = setsText,
@@ -382,7 +366,6 @@ fun EditExerciseDialog(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Delete Icon Button
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
