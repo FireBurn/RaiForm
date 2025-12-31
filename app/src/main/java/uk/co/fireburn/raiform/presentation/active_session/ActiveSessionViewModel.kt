@@ -59,7 +59,6 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
-    // NEW: Toggle Maintain Weight status
     fun toggleMaintainWeight(exerciseId: String) {
         val currentSession = _uiState.value.session ?: return
         val updatedExercises = currentSession.exercises.map { exercise ->
@@ -74,11 +73,18 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
-    private fun saveSession(session: Session) {
-        viewModelScope.launch {
-            repository.updateSession(clientId, session)
-        }
+    // --- NEW FUNCTION TO FIX YOUR ERROR ---
+    fun reorderExercises(newOrder: List<Exercise>) {
+        val currentSession = _uiState.value.session ?: return
+
+        // Update local state immediately for smooth UI
+        val updatedSession = currentSession.copy(exercises = newOrder)
+        _uiState.update { it.copy(session = updatedSession) }
+
+        // Save new order to database
+        saveSession(updatedSession)
     }
+    // --------------------------------------
 
     fun addExercise(name: String) {
         val currentSession = _uiState.value.session ?: return
@@ -130,6 +136,12 @@ class ActiveSessionViewModel @Inject constructor(
         val updatedSession = currentSession.copy(exercises = updatedList)
         _uiState.update { it.copy(session = updatedSession) }
         saveSession(updatedSession)
+    }
+
+    private fun saveSession(session: Session) {
+        viewModelScope.launch {
+            repository.updateSession(clientId, session)
+        }
     }
 
     private fun String.toTitleCase(): String {

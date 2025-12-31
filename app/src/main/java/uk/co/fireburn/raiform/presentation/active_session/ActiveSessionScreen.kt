@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.presentation.active_session
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -48,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import org.burnoutcrew.reorderable.ReorderableItem
+import org.burnoutcrew.reorderable.detectReorderAfterLongPress
+import org.burnoutcrew.reorderable.rememberReorderableLazyListState
+import org.burnoutcrew.reorderable.reorderable
 import uk.co.fireburn.raiform.domain.model.Exercise
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +79,21 @@ fun ActiveSessionScreen(
     // State for Add Exercise Dialog
     var showAddExerciseDialog by remember { mutableStateOf(false) }
     var newExerciseName by remember { mutableStateOf("") }
+
+    // Reorder State
+    val reorderState = rememberReorderableLazyListState(
+        onMove = { from, to ->
+            // Update the UI immediately (Optimistic update)
+            // Note: You need to add a 'reorderExercises' function to your ActiveSessionViewModel
+            // that accepts a List<Exercise> and updates the state/database.
+            if (session != null) {
+                val list = session.exercises.toMutableList()
+                val item = list.removeAt(from.index)
+                list.add(to.index, item)
+                viewModel.reorderExercises(list)
+            }
+        }
+    )
 
     Scaffold(
         topBar = {
@@ -104,23 +126,39 @@ fun ActiveSessionScreen(
             }
         } else {
             LazyColumn(
+                state = reorderState.listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
+                    .padding(16.dp)
+                    .reorderable(reorderState), // Enable reordering logic
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. List of Exercises
-                items(session.exercises) { exercise ->
-                    ActiveExerciseCard(
-                        exercise = exercise,
-                        onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                        onEdit = { exerciseToEdit = exercise }, // Open Dialog
-                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
-                    )
+                // 1. Reorderable List of Exercises
+                items(session.exercises, key = { it.id }) { exercise ->
+                    ReorderableItem(reorderState, key = exercise.id) { isDragging ->
+                        val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
+
+                        Box(modifier = Modifier.shadow(elevation.value)) {
+                            ActiveExerciseCard(
+                                exercise = exercise,
+                                onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                                onEdit = { exerciseToEdit = exercise },
+                                onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
+                                dragHandle = {
+                                    Icon(
+                                        imageVector = Icons.Default.DragHandle,
+                                        contentDescription = "Reorder",
+                                        modifier = Modifier.detectReorderAfterLongPress(reorderState),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                        }
+                    }
                 }
 
-                // 2. Add Exercise Button at bottom
+                // 2. Add Exercise Button at bottom (Not reorderable)
                 item {
                     Button(
                         onClick = { showAddExerciseDialog = true },
@@ -161,7 +199,7 @@ fun ActiveSessionScreen(
                     Button(onClick = {
                         if (newExerciseName.isNotBlank()) {
                             viewModel.addExercise(newExerciseName)
-                            newExerciseName = "" // Reset
+                            newExerciseName = ""
                             showAddExerciseDialog = false
                         }
                     }) {
@@ -197,7 +235,8 @@ fun ActiveExerciseCard(
     exercise: Exercise,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onToggleMaintain: () -> Unit
+    onToggleMaintain: () -> Unit,
+    dragHandle: @Composable () -> Unit // New parameter
 ) {
     val cardColor = if (exercise.isDone)
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -215,7 +254,12 @@ fun ActiveExerciseCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Checkbox (Left)
+            // 1. Drag Handle (Far Left)
+            dragHandle()
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // 2. Checkbox
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (exercise.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -227,11 +271,11 @@ fun ActiveExerciseCard(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // 2. Text Info (Center - Clickable)
+            // 3. Text Info (Center - Clickable)
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { onEdit() } // Click text to edit
+                    .clickable { onEdit() }
             ) {
                 Text(
                     text = exercise.name,
@@ -254,22 +298,22 @@ fun ActiveExerciseCard(
                 }
             }
 
-            // 3. Maintain Weight Toggle (Right - Same height as checkbox)
+            // 4. Maintain Weight Toggle (Far Right - Same height as checkbox)
             IconButton(onClick = onToggleMaintain) {
                 if (exercise.maintainWeight) {
                     // Currently Maintaining -> Pause Symbol (Red)
                     Icon(
-                        Icons.Default.Pause,
+                        imageVector = Icons.Default.Pause,
                         contentDescription = "Maintain Weight",
-                        tint = Color.Red, // <--- RED
+                        tint = Color.Red,
                         modifier = Modifier.size(32.dp)
                     )
                 } else {
                     // Currently Progressing -> Up Arrow (Green)
                     Icon(
-                        Icons.Default.ArrowUpward,
+                        imageVector = Icons.Default.ArrowUpward,
                         contentDescription = "Increase Weight",
-                        tint = Color.Green, // <--- GREEN
+                        tint = Color.Green,
                         modifier = Modifier.size(32.dp)
                     )
                 }

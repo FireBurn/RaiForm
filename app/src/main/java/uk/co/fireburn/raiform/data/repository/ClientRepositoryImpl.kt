@@ -99,6 +99,48 @@ class ClientRepositoryImpl @Inject constructor(
         batch.commit().await()
     }
 
+    override fun getArchivedClients(): Flow<List<Client>> = callbackFlow {
+        val listener = clientsCollection
+            .whereEqualTo("status", "REMOVED")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val clients = snapshot?.documents?.mapNotNull { doc ->
+                    // ... (Use same mapping logic as getClients, but map 'weeklyResetDay' too) ...
+                    val id = doc.id
+                    val name = doc.getString("name") ?: "Unknown"
+                    val status = ClientStatus.REMOVED
+                    val dateAdded = doc.getLong("dateAdded") ?: 0L
+                    val notes = doc.getString("notes") ?: ""
+                    val resetDay = doc.getLong("weeklyResetDay")?.toInt() ?: 7
+
+                    Client(id, name, status, notes, dateAdded, resetDay)
+                } ?: emptyList()
+                trySend(clients)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    override suspend fun restoreClient(clientId: String) {
+        clientsCollection.document(clientId)
+            .update("status", ClientStatus.ACTIVE.name)
+            .await()
+    }
+
+    override suspend fun updateClientSessionsOrder(clientId: String, sessions: List<Session>) {
+        // In Firestore, rewriting the whole subcollection list is tricky if we don't have a wrapper.
+        // For simplicity in this architecture, we update each document in a batch.
+        val batch = firestore.batch()
+        val sessionsRef = clientsCollection.document(clientId).collection("sessions")
+
+        sessions.forEach { session ->
+            batch.set(sessionsRef.document(session.id), session)
+        }
+        batch.commit().await()
+    }
+
     override fun getSessionsForClient(clientId: String): Flow<List<Session>> = callbackFlow {
         val listener = clientsCollection.document(clientId)
             .collection("sessions")

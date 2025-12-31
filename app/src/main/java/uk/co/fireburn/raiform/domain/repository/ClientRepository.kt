@@ -26,6 +26,13 @@ interface ClientRepository {
      */
     suspend fun archiveClient(clientId: String)
 
+    fun getArchivedClients(): Flow<List<Client>>
+
+    suspend fun restoreClient(clientId: String)
+
+    // Save the full list order (for drag and drop)
+    suspend fun updateClientSessionsOrder(clientId: String, sessions: List<Session>)
+
     /**
      * Saves a new client AND their schedule in one go.
      */
