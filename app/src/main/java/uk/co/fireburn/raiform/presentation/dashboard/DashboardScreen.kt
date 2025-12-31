@@ -22,10 +22,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -97,12 +100,37 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddClientDialog = true }, // Opens Manual Add Dialog
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+            // Stack of Action Buttons
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Client")
+                // 1. Archived Clients (Small Button)
+                SmallFloatingActionButton(
+                    onClick = { navController.navigate("archived_clients") },
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Icon(Icons.Default.Restore, contentDescription = "Archived Clients")
+                }
+
+                // 2. Main Scheduler (Clock Icon)
+                FloatingActionButton(
+                    onClick = { navController.navigate("main_scheduler") },
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = Color.Black
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = "Global Scheduler")
+                }
+
+                // 3. Add Client (Primary Button)
+                FloatingActionButton(
+                    onClick = { showAddClientDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Client")
+                }
             }
         }
     ) { paddingValues ->
@@ -139,7 +167,7 @@ fun DashboardScreen(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(bottom = 120.dp) // Extra padding for the stack of FABs
                 ) {
                     items(state.clients) { client ->
                         ClientCard(

@@ -175,4 +175,22 @@ class ClientRepositoryImpl @Inject constructor(
             .delete()
             .await()
     }
+
+    override suspend fun getAllSessionsFromAllClients(): List<Session> {
+        // Fetches all clients, then all their sub-collections.
+        // Note: In a massive production app, you'd use a Collection Group Query.
+        // For a PT app ( < 100 clients), iterating is fine and cost-effective.
+        val clientsSnapshot = clientsCollection
+            .whereNotEqualTo("status", "REMOVED")
+            .get().await()
+
+        val allSessions = mutableListOf<Session>()
+
+        for (doc in clientsSnapshot.documents) {
+            val sessionsSnapshot = doc.reference.collection("sessions").get().await()
+            val sessions = sessionsSnapshot.toObjects(Session::class.java)
+            allSessions.addAll(sessions)
+        }
+        return allSessions
+    }
 }

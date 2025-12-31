@@ -56,6 +56,21 @@ class MainActivity : ComponentActivity() {
                                 navController = navController
                             )
                         }
+
+                        // 5. Archived Clients
+                        composable("archived_clients") {
+                            uk.co.fireburn.raiform.presentation.archived.ArchivedClientsScreen(
+                                navController
+                            )
+                        }
+
+                        // 6. Main Scheduler
+                        composable("main_scheduler") {
+                            uk.co.fireburn.raiform.presentation.scheduler.MainSchedulerScreen(
+                                navController
+                            )
+                        }
+
                         // Future routes (e.g., Active Session) will go here
                     }
                 }

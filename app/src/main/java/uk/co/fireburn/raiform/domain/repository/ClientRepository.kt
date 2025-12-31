@@ -52,4 +52,7 @@ interface ClientRepository {
      * Deletes a single session
      */
     suspend fun deleteSession(clientId: String, sessionId: String)
+
+    // Needed for the Main Scheduler to check conflicts
+    suspend fun getAllSessionsFromAllClients(): List<Session>
 }
