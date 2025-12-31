@@ -55,6 +55,30 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    // Add a client manually
+    fun addClient(name: String) {
+        viewModelScope.launch {
+            try {
+                val newClient = Client(name = name)
+                repository.saveClient(newClient)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Error adding client: ${e.message}") }
+            }
+        }
+    }
+
+    // Rename existing client
+    fun updateClientName(client: Client, newName: String) {
+        viewModelScope.launch {
+            try {
+                val updatedClient = client.copy(name = newName)
+                repository.saveClient(updatedClient)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Error updating client: ${e.message}") }
+            }
+        }
+    }
+
     fun archiveClient(client: Client) {
         viewModelScope.launch {
             try {

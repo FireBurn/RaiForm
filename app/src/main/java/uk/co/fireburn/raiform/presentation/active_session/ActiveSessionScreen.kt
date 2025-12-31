@@ -174,8 +174,8 @@ fun ActiveSessionScreen(
             EditExerciseDialog(
                 exercise = exerciseToEdit!!,
                 onDismiss = { exerciseToEdit = null },
-                onConfirm = { weight, sets, reps ->
-                    viewModel.updateExerciseValues(exerciseToEdit!!.id, weight, sets, reps)
+                onConfirm = { name, weight, sets, reps ->
+                    viewModel.updateExerciseValues(exerciseToEdit!!.id, name, weight, sets, reps)
                     exerciseToEdit = null
                 },
                 onDelete = {
@@ -262,9 +262,10 @@ fun ActiveExerciseCard(
 fun EditExerciseDialog(
     exercise: Exercise,
     onDismiss: () -> Unit,
-    onConfirm: (Double, Int, Int) -> Unit,
+    onConfirm: (String, Double, Int, Int) -> Unit,
     onDelete: () -> Unit
 ) {
+    var nameText by remember { mutableStateOf(exercise.name) }
     var weightText by remember { mutableStateOf(if (exercise.isBodyweight) "0" else exercise.weight.toString()) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
@@ -297,6 +298,14 @@ fun EditExerciseDialog(
             title = { Text("Update: ${exercise.name}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1. Name Field
+                    OutlinedTextField(
+                        value = nameText,
+                        onValueChange = { nameText = it },
+                        label = { Text("Exercise Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     if (!exercise.isBodyweight) {
                         OutlinedTextField(
                             value = weightText,
@@ -328,7 +337,9 @@ fun EditExerciseDialog(
                     val w = weightText.toDoubleOrNull() ?: 0.0
                     val s = setsText.toIntOrNull() ?: 0
                     val r = repsText.toIntOrNull() ?: 0
-                    onConfirm(w, s, r)
+                    if (nameText.isNotBlank()) {
+                        onConfirm(nameText, w, s, r)
+                    }
                 }) {
                     Text("SAVE")
                 }

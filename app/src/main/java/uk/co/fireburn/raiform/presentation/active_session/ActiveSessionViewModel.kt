@@ -73,12 +73,13 @@ class ActiveSessionViewModel @Inject constructor(
         }
     }
 
-    fun updateExerciseValues(exerciseId: String, newWeight: Double, newSets: Int, newReps: Int) {
+    fun updateExerciseValues(exerciseId: String, name: String, newWeight: Double, newSets: Int, newReps: Int) {
         val currentSession = _uiState.value.session ?: return
 
         val updatedExercises = currentSession.exercises.map { exercise ->
             if (exercise.id == exerciseId) {
                 exercise.copy(
+                    name = name,
                     weight = newWeight,
                     sets = newSets,
                     reps = newReps

@@ -21,9 +21,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -35,8 +39,10 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -65,6 +71,15 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    // --- Local Dialog States ---
+    
+    // 1. Add Client Dialog State
+    var showAddClientDialog by remember { mutableStateOf(false) }
+    var newClientName by remember { mutableStateOf("") }
+
+    // 2. Rename Client Dialog State
+    var clientToRename by remember { mutableStateOf<Client?>(null) }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -83,7 +98,7 @@ fun DashboardScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { navController.navigate("import") },
+                onClick = { showAddClientDialog = true }, // Opens Manual Add Dialog
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
@@ -112,13 +127,15 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 3. Client List
+            // 3. Client List Logic
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else if (state.clients.isEmpty()) {
-                EmptyState()
+                EmptyState(
+                    onImportClick = { navController.navigate("import") }
+                )
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -132,11 +149,96 @@ fun DashboardScreen(
                             },
                             onArchive = {
                                 viewModel.archiveClient(client)
+                            },
+                            onRename = {
+                                clientToRename = client
                             }
                         )
                     }
                 }
             }
+        }
+
+        // --- DIALOGS ---
+
+        // 1. New Client Dialog (Manual Entry or Link to Import)
+        if (showAddClientDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddClientDialog = false },
+                title = { Text("New Client") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = newClientName,
+                            onValueChange = { newClientName = it },
+                            label = { Text("Client Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Link to Smart Import
+                        TextButton(
+                            onClick = {
+                                showAddClientDialog = false
+                                navController.navigate("import")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Use Smart Import instead")
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        if (newClientName.isNotBlank()) {
+                            viewModel.addClient(newClientName)
+                            newClientName = ""
+                            showAddClientDialog = false
+                        }
+                    }) {
+                        Text("Create")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddClientDialog = false }) { Text("Cancel") }
+                }
+            )
+        }
+
+        // 2. Rename Client Dialog
+        if (clientToRename != null) {
+            var renameText by remember { mutableStateOf(clientToRename!!.name) }
+            
+            AlertDialog(
+                onDismissRequest = { clientToRename = null },
+                title = { Text("Rename Client") },
+                text = {
+                    OutlinedTextField(
+                        value = renameText,
+                        onValueChange = { renameText = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        if (renameText.isNotBlank()) {
+                            viewModel.updateClientName(clientToRename!!, renameText)
+                            clientToRename = null
+                        }
+                    }) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { clientToRename = null }) { Text("Cancel") }
+                }
+            )
         }
     }
 }
@@ -187,7 +289,8 @@ fun StatusCard(activeCount: Int) {
 fun ClientCard(
     client: Client,
     onClick: () -> Unit,
-    onArchive: () -> Unit
+    onArchive: () -> Unit,
+    onRename: () -> Unit
 ) {
     // State to control the dropdown menu
     var showMenu by remember { mutableStateOf(false) }
@@ -253,6 +356,28 @@ fun ClientCard(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
+                    // 1. Rename Option
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "Edit Name",
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onRename()
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    )
+                    
+                    // 2. Archive Option
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -279,7 +404,7 @@ fun ClientCard(
 }
 
 @Composable
-fun EmptyState() {
+fun EmptyState(onImportClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -298,10 +423,12 @@ fun EmptyState() {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            text = "Tap + to import from Google Keep",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        TextButton(onClick = onImportClick) {
+            Text(
+                text = "Try Smart Import",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }

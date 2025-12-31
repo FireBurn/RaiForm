@@ -93,6 +93,18 @@ class ClientDetailsViewModel @Inject constructor(
         }
     }
 
+    // NEW: Rename Session
+    fun renameSession(session: Session, newName: String) {
+        viewModelScope.launch {
+            try {
+                val updatedSession = session.copy(name = newName)
+                repository.updateSession(clientId, updatedSession)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to rename: ${e.message}") }
+            }
+        }
+    }
+
     fun deleteSession(session: Session) {
         viewModelScope.launch {
             try {
