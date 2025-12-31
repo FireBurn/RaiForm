@@ -83,14 +83,20 @@ fun ActiveSessionScreen(
     // Reorder State
     val reorderState = rememberReorderableLazyListState(
         onMove = { from, to ->
-            // Update the UI immediately (Optimistic update)
-            // Note: You need to add a 'reorderExercises' function to your ActiveSessionViewModel
-            // that accepts a List<Exercise> and updates the state/database.
-            if (session != null) {
-                val list = session.exercises.toMutableList()
-                val item = list.removeAt(from.index)
-                list.add(to.index, item)
-                viewModel.reorderExercises(list)
+            // CRITICAL FIX: Access state directly from ViewModel to ensure lambda uses fresh data
+            // Do NOT use the local 'session' variable here as it might be stale inside the remember block
+            val currentSession = viewModel.uiState.value.session
+
+            if (currentSession != null) {
+                val list = currentSession.exercises.toMutableList()
+
+                // Ensure indices are valid (Reorderable might return indices including headers/footers)
+                // Since 'items' is the first component, indices usually match 0-based list
+                if (from.index in list.indices && to.index in list.indices) {
+                    val item = list.removeAt(from.index)
+                    list.add(to.index, item)
+                    viewModel.reorderExercises(list)
+                }
             }
         }
     )
@@ -236,7 +242,7 @@ fun ActiveExerciseCard(
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onToggleMaintain: () -> Unit,
-    dragHandle: @Composable () -> Unit // New parameter
+    dragHandle: @Composable () -> Unit
 ) {
     val cardColor = if (exercise.isDone)
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)

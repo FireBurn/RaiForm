@@ -59,9 +59,11 @@ fun ArchivedClientsScreen(
                 Text("No archived clients", color = MaterialTheme.colorScheme.secondary)
             }
         } else {
-            LazyColumn(modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(16.dp)
+            ) {
                 items(clients) { client ->
                     Card(
                         modifier = Modifier
