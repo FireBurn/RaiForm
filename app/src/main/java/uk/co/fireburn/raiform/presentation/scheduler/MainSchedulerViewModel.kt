@@ -3,6 +3,7 @@ package uk.co.fireburn.raiform.presentation.scheduler
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -14,7 +15,7 @@ import javax.inject.Inject
 
 data class SchedulerState(
     val clients: List<Client> = emptyList(),
-    val allGlobalSessions: List<Session> = emptyList(), // Used for collision check
+    val allGlobalSessions: List<Session> = emptyList(),
 
     val selectedClient: Client? = null,
     val clientSessions: List<Session> = emptyList(),
@@ -23,7 +24,6 @@ data class SchedulerState(
     val selectedDay: Int = 1, // 1=Mon
     val selectedHour: Int = -1, // -1 = None
 
-    // Map of Day -> List of Taken Hours
     val occupiedSlots: Map<Int, List<Int>> = emptyMap()
 )
 
@@ -41,7 +41,6 @@ class MainSchedulerViewModel @Inject constructor(
 
     private fun loadInitialData() {
         viewModelScope.launch {
-            // 1. Load Clients
             repository.getClients().collect { clients ->
                 _state.update { it.copy(clients = clients) }
             }
@@ -62,9 +61,8 @@ class MainSchedulerViewModel @Inject constructor(
         val map = mutableMapOf<Int, MutableList<Int>>()
 
         all.forEach { session ->
-            // If session is scheduled and NOT skipped
             if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
-                // If we are editing a session, exclude it from collision check (don't block yourself)
+                // If editing, don't show current session's OLD time as occupied
                 if (session.id != _state.value.selectedSession?.id) {
                     val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
                     list.add(session.scheduledHour)
@@ -77,9 +75,14 @@ class MainSchedulerViewModel @Inject constructor(
     fun selectClient(client: Client) {
         viewModelScope.launch {
             _state.update { it.copy(selectedClient = client, selectedSession = null) }
-            // Fetch sessions for this client specifically to list them
             repository.getSessionsForClient(client.id).collect { sessions ->
                 _state.update { it.copy(clientSessions = sessions) }
+
+                // Auto-select first unscheduled (or just first) session?
+                // For now, let user pick, or auto-select first one.
+                if (sessions.isNotEmpty()) {
+                    selectSession(sessions.first())
+                }
             }
         }
     }
@@ -92,32 +95,74 @@ class MainSchedulerViewModel @Inject constructor(
                 selectedHour = session.scheduledHour ?: -1
             )
         }
-        // Recalculate slots so we don't show the current session as a conflict
         calculateOccupiedSlots()
     }
 
     fun selectDay(day: Int) {
         _state.update { it.copy(selectedDay = day) }
+        // We do NOT auto-save on Day change, user must pick a time.
     }
 
     fun selectHour(hour: Int) {
+        // 1. Visual Cue: Update UI immediately
         _state.update { it.copy(selectedHour = hour) }
+
+        // 2. Trigger Auto-Save & Advance after short delay
+        viewModelScope.launch {
+            delay(300) // Visible delay for user to see selection
+            saveSchedule()
+        }
     }
 
-    fun saveSchedule() {
+    fun skipSession() {
+        val s = _state.value
+        val session = s.selectedSession ?: return
+
+        val updated = session.copy(isSkippedThisWeek = true)
+
+        viewModelScope.launch {
+            repository.updateSession(s.selectedClient!!.id, updated)
+            refreshGlobalSlots()
+            selectNextSession(session.id)
+        }
+    }
+
+    fun moveToNextWeek() {
+        // Behaves like skip for now, but conceptually pushes it
+        // We could implement specific "Next Week" logic here if model supports it.
+        // For now, treating as Skip/Reschedule later.
+        skipSession()
+    }
+
+    private fun saveSchedule() {
         val s = _state.value
         if (s.selectedClient != null && s.selectedSession != null && s.selectedHour != -1) {
             val updated = s.selectedSession.copy(
                 scheduledDay = s.selectedDay,
                 scheduledHour = s.selectedHour,
-                scheduledMinute = 0 // Default to top of the hour
+                scheduledMinute = 0,
+                isSkippedThisWeek = false // Ensure it's active
             )
 
             viewModelScope.launch {
                 repository.updateSession(s.selectedClient.id, updated)
-                // Reset selection or give feedback
-                refreshGlobalSlots() // Refresh red/green logic
+                refreshGlobalSlots()
+                selectNextSession(s.selectedSession.id)
             }
+        }
+    }
+
+    private fun selectNextSession(currentId: String) {
+        val currentList = _state.value.clientSessions
+        val index = currentList.indexOfFirst { it.id == currentId }
+
+        if (index != -1 && index < currentList.size - 1) {
+            // Move to next
+            val nextSession = currentList[index + 1]
+            selectSession(nextSession)
+        } else {
+            // Done with this client
+            _state.update { it.copy(selectedSession = null, selectedHour = -1) }
         }
     }
 }

@@ -21,7 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.NextWeek
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,7 +97,7 @@ fun MainSchedulerScreen(
                 }
             }
 
-            // 2. SELECT SESSION (Only if client selected)
+            // 2. SELECT SESSION
             if (state.clientSessions.isNotEmpty()) {
                 Text(
                     "2. Select Session",
@@ -122,7 +123,7 @@ fun MainSchedulerScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // Day Buttons (Mon - Sun)
+                // Day Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -140,27 +141,67 @@ fun MainSchedulerScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // The Dartboard Clock
-                // Pass taken hours for the selected day
+                // Dartboard Clock (Auto-confirms on selection)
                 val taken = state.occupiedSlots[state.selectedDay] ?: emptyList()
 
                 DartboardClock(
                     takenHours = taken,
                     selectedHour = state.selectedHour,
-                    onHourSelected = { viewModel.selectHour(it) }
+                    onHourSelected = { viewModel.selectHour(it) } // Triggers auto-advance
                 )
 
-                // Confirm Button
-                Button(
-                    onClick = { viewModel.saveSchedule() },
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 4. ACTION BUTTONS (Skip / Next Week)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Skip Session
+                    Button(
+                        onClick = { viewModel.skipSession() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Cancel, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("SKIP")
+                    }
+
+                    // Move to Next Week
+                    Button(
+                        onClick = { viewModel.moveToNextWeek() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(Icons.Default.NextWeek, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("NEXT WEEK")
+                    }
+                }
+            } else if (state.selectedClient != null && state.clientSessions.isNotEmpty()) {
+                // All done state
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("CONFIRM SCHEDULE")
+                    Text(
+                        "All sessions scheduled!",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.Green
+                    )
                 }
             }
         }

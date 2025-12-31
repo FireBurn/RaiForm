@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
@@ -41,17 +40,15 @@ fun DartboardClock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f) // Square box
+            .aspectRatio(1f)
     ) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures { tapOffset ->
-                        // FIX: Explicitly convert IntSize to Float for Offset calculations
                         val width = size.width.toFloat()
                         val height = size.height.toFloat()
-
                         val center = Offset(width / 2, height / 2)
                         val radius = min(width, height) / 2
 
@@ -59,33 +56,39 @@ fun DartboardClock(
                         val dy = tapOffset.y - center.y
                         val dist = sqrt(dx * dx + dy * dy)
 
-                        // Ignore taps outside the clock or in the dead center
+                        // Ignore center dead zone and outside touches
                         if (dist > radius || dist < radius * 0.1f) return@detectTapGestures
 
-                        // Calculate Angle (-PI to PI)
-                        // -PI/2 is 12 o'clock (Top). We need to adjust.
-                        var angleRad = atan2(dy, dx) + (PI / 2)
-                        if (angleRad < 0) angleRad += 2 * PI
+                        // 1. Calculate Angle in Degrees (0 at 12 o'clock, clockwise)
+                        // standard atan2 returns angle from X axis (3 o'clock).
+                        // We rotate it 90 degrees to make 12 o'clock 0.
+                        var angleDeg =
+                            Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f
+                        if (angleDeg < 0) angleDeg += 360f // Normalize to 0-360
 
-                        // Convert angle to segment (0-11)
-                        val segmentAngle = (2 * PI) / 12
-                        val segmentIndex = (angleRad / segmentAngle).toInt() % 12
+                        // 2. Map to Segment Index (0-11)
+                        // Each segment is 30 degrees.
+                        // Segment 0 (12 o'clock) is centered at 0 deg, spanning 345 to 15.
+                        // We shift by +15 so the division floors correctly.
+                        // (350 + 15) % 360 = 5 / 30 = 0
+                        // (10 + 15) % 360 = 25 / 30 = 0
+                        // (20 + 15) % 360 = 35 / 30 = 1 (1 o'clock)
+                        val segmentIndex = ((angleDeg + 15f) % 360f / 30f).toInt()
 
-                        // Determine Ring (Inner = AM, Outer = PM)
+                        // 3. Determine Ring (Inner=AM, Outer=PM)
                         val isOuterRing = dist > (radius * 0.6f)
 
-                        // Map segment index to hour
-                        val rawHour = if (segmentIndex == 0) 0 else segmentIndex
+                        // 4. Calculate Final Hour (0-23)
+                        val rawHour = segmentIndex % 12 // Ensure 0-11 range
 
                         val finalHour = if (isOuterRing) {
-                            // Outer Ring is PM
-                            if (rawHour == 0) 12 else 12 + rawHour
+                            // Outer Ring (PM): 12, 1, 2... 11 -> 12, 13, 14... 23
+                            if (rawHour == 0) 12 else rawHour + 12
                         } else {
-                            // Inner Ring is AM
+                            // Inner Ring (AM): 0, 1, 2... 11
                             rawHour
                         }
 
-                        // Check if blocked
                         if (!takenHours.contains(finalHour)) {
                             onHourSelected(finalHour)
                         }
@@ -98,8 +101,10 @@ fun DartboardClock(
 
             // --- DRAW SECTORS ---
             for (i in 0 until 12) {
-                // Calculate start angle for this hour segment
-                val startAngle = (i * 30f) - 90f - 15f
+                // Drawing starts from 3 o'clock (0 deg) in standard Compose Canvas.
+                // 12 o'clock is -90 deg.
+                // Center the wedge: start at -90 - 15 + (i*30)
+                val startAngle = -90f - 15f + (i * 30f)
 
                 // 1. Draw Outer Sector (PM)
                 val pmHour = if (i == 0) 12 else i + 12
@@ -155,7 +160,7 @@ fun DartboardClock(
             )
 
             for (i in 0 until 12) {
-                val angleRad = Math.toRadians((i * 30 - 90 - 15).toDouble())
+                val angleRad = Math.toRadians((-90 - 15 + i * 30).toDouble())
                 val endX = center.x + radius * cos(angleRad).toFloat()
                 val endY = center.y + radius * sin(angleRad).toFloat()
 
@@ -182,7 +187,8 @@ fun DartboardClock(
                 }
 
                 for (i in 0 until 12) {
-                    val angleRad = Math.toRadians((i * 30 - 90).toDouble())
+                    // Text is centered at the "middle" of the wedge
+                    val angleRad = Math.toRadians((-90 + i * 30).toDouble())
 
                     // PM Numbers
                     val pmRadius = radius * 0.8f
