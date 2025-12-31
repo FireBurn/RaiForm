@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -43,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import uk.co.fireburn.raiform.domain.model.Client
@@ -123,18 +123,21 @@ fun MainSchedulerScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // Day Buttons
+                // Day Buttons (Mon - Sun)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(4.dp) // Small gap between buttons
                 ) {
                     for (day in 1..7) {
+                        // Use SHORT style for "Mon", "Tue", etc.
                         val dayName =
-                            DayOfWeek.of(day).getDisplayName(TextStyle.NARROW, Locale.getDefault())
+                            DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault())
+
                         DayButton(
                             text = dayName,
                             isSelected = state.selectedDay == day,
-                            onClick = { viewModel.selectDay(day) }
+                            onClick = { viewModel.selectDay(day) },
+                            modifier = Modifier.weight(1f) // Distribute width equally
                         )
                     }
                 }
@@ -235,11 +238,16 @@ fun SessionChip(session: Session, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun DayButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
+fun DayButton(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
+        modifier = modifier
+            .height(40.dp) // Comfortable touch height
+            .clip(CircleShape) // Makes it a stadium/capsule shape
             .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick() }
             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
@@ -248,6 +256,7 @@ fun DayButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
         Text(
             text = text,
             fontWeight = FontWeight.Bold,
+            fontSize = 12.sp, // Slightly smaller text to fit "Mon" in tight spaces
             color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
         )
     }
