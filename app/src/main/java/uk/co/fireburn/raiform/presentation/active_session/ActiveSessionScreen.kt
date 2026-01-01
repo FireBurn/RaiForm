@@ -1,6 +1,5 @@
 package uk.co.fireburn.raiform.presentation.active_session
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,7 +53,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -62,10 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import org.burnoutcrew.reorderable.ReorderableItem
-import org.burnoutcrew.reorderable.detectReorderAfterLongPress
-import org.burnoutcrew.reorderable.rememberReorderableLazyListState
-import org.burnoutcrew.reorderable.reorderable
 import uk.co.fireburn.raiform.domain.model.Exercise
 import kotlin.math.abs
 
@@ -80,20 +74,6 @@ fun ActiveSessionScreen(
 
     var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
-
-    val reorderState = rememberReorderableLazyListState(
-        onMove = { from, to ->
-            val currentSession = viewModel.uiState.value.session
-            if (currentSession != null) {
-                val list = currentSession.exercises.toMutableList()
-                if (from.index in list.indices && to.index in list.indices) {
-                    val item = list.removeAt(from.index)
-                    list.add(to.index, item)
-                    viewModel.reorderExercises(list)
-                }
-            }
-        }
-    )
 
     Scaffold(
         topBar = {
@@ -126,38 +106,30 @@ fun ActiveSessionScreen(
             }
         } else {
             LazyColumn(
-                state = reorderState.listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp)
-                    .reorderable(reorderState),
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 1. List of Exercises
                 items(session.exercises, key = { it.id }) { exercise ->
-                    ReorderableItem(reorderState, key = exercise.id) { isDragging ->
-                        val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
-
-                        Box(modifier = Modifier.shadow(elevation.value)) {
-                            ActiveExerciseCard(
-                                exercise = exercise,
-                                onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                                onEdit = {
-                                    isCreatingNew = false
-                                    exerciseInDialog = exercise
-                                },
-                                onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
-                                dragHandle = {
-                                    Icon(
-                                        imageVector = Icons.Default.DragHandle,
-                                        contentDescription = "Reorder",
-                                        modifier = Modifier.detectReorderAfterLongPress(reorderState),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                    ActiveExerciseCard(
+                        exercise = exercise,
+                        onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                        onEdit = {
+                            isCreatingNew = false
+                            exerciseInDialog = exercise
+                        },
+                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
+                        dragHandle = {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Reorder",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         }
-                    }
+                    )
                 }
 
                 item {
@@ -215,6 +187,7 @@ fun ActiveSessionScreen(
     }
 }
 
+// ... (Rest of ActiveSessionScreen.kt helpers remain the same as previous) ...
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,
@@ -312,7 +285,6 @@ fun ExerciseDialog(
     onDelete: () -> Unit
 ) {
     var nameText by remember { mutableStateOf(exercise.name) }
-    // Store absolute weight and its modifier separately for clarity
     var weightText by remember { mutableStateOf(abs(exercise.weight).toString()) }
     var weightModifier by remember { mutableStateOf(if (exercise.weight >= 0) 1 else -1) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
@@ -409,7 +381,6 @@ fun ExerciseDialog(
             confirmButton = {
                 Button(onClick = {
                     val w = weightText.toDoubleOrNull() ?: 0.0
-                    // Apply sign only if it's a bodyweight exercise
                     val finalWeight = if (isBodyweight) w * weightModifier else w
                     val s = setsText.toIntOrNull() ?: 0
                     val r = repsText.toIntOrNull() ?: 0

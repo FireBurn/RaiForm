@@ -19,6 +19,7 @@ object FirebaseModule {
     @Singleton
     fun provideFirestore(): FirebaseFirestore {
         return Firebase.firestore("raiformdb")
+
     }
 
     @Provides

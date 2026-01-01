@@ -3,7 +3,6 @@ package uk.co.fireburn.raiform
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -17,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.util.Consumer
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -38,6 +38,11 @@ class MainActivity : ComponentActivity() {
         createNotificationChannel()
         checkPermissions()
 
+        // Listen for new intents (Widget Deep Links)
+        addOnNewIntentListener(Consumer { intent ->
+            setIntent(intent)
+        })
+
         setContent {
             RaiFormTheme {
                 Surface(
@@ -47,18 +52,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
 
                     LaunchedEffect(Unit) {
-                        val target = intent?.getStringExtra("navigation_target")
-                        val clientId = intent?.getStringExtra("client_id")
-                        val sessionId = intent?.getStringExtra("session_id")
-
-                        when (target) {
-                            "scheduler" -> navController.navigate("main_scheduler")
-                            "session" -> {
-                                if (clientId != null && sessionId != null) {
-                                    navController.navigate("active_session/$clientId/$sessionId")
-                                }
-                            }
-                        }
+                        handleIntent(intent, navController)
                     }
 
                     NavHost(
@@ -107,6 +101,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun handleIntent(intent: Intent?, navController: androidx.navigation.NavController) {
+        val target = intent?.getStringExtra("navigation_target")
+        val clientId = intent?.getStringExtra("client_id")
+        val sessionId = intent?.getStringExtra("session_id")
+
+        when (target) {
+            "scheduler" -> navController.navigate("main_scheduler")
+            "session" -> {
+                if (clientId != null && sessionId != null) {
+                    navController.navigate("active_session/$clientId/$sessionId")
+                }
+            }
+        }
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Scheduling Reminders"
@@ -133,9 +142,5 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // CHANGED: Match the new non-nullable signature
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-    }
+    // Explicit override removed as we are using addOnNewIntentListener which is safer across versions
 }
