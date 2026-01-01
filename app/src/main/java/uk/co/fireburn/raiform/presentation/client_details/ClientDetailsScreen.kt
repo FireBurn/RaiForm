@@ -249,14 +249,15 @@ fun SessionCard(
     val scheduleText = if (session.isSkippedThisWeek) {
         "Cancelled for this week"
     } else if (session.scheduledDay != null) {
+        // CHANGED: Use TextStyle.FULL to display full day name
         val day =
-            DayOfWeek.of(session.scheduledDay).getDisplayName(TextStyle.SHORT, Locale.getDefault())
+            DayOfWeek.of(session.scheduledDay).getDisplayName(TextStyle.FULL, Locale.getDefault())
         val hour = session.scheduledHour ?: 0
         val minute = session.scheduledMinute ?: 0
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
 
-        // CHANGED: Hide minutes if 0
+        // Hide minutes if 0
         val time = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
         "$day @ $time"
     } else {
