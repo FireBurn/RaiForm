@@ -71,9 +71,6 @@ import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
 
-// Enum defined at top level to be accessible
-enum class SessionAction { Rename, Delete, Schedule, ToggleSkip }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientDetailsScreen(

@@ -3,6 +3,7 @@ package uk.co.fireburn.raiform
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -95,7 +96,6 @@ class MainActivity : ComponentActivity() {
                                 navController
                             )
                         }
-                        // NEW ROUTE
                         composable("client_stats/{clientId}") {
                             uk.co.fireburn.raiform.presentation.client_stats.ClientStatsScreen(
                                 navController
@@ -133,7 +133,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    // CHANGED: Match the new non-nullable signature
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
     }
