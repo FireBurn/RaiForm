@@ -22,6 +22,8 @@ import javax.inject.Inject
 data class ClientDetailsUiState(
     val client: Client? = null,
     val sessions: List<Session> = emptyList(),
+    // Map of Day(1-7) -> List of Hours(0-23) that are busy globally
+    val globalOccupiedSlots: Map<Int, List<Int>> = emptyMap(),
     val isLoading: Boolean = true,
     val error: String? = null
 )
@@ -38,6 +40,7 @@ class ClientDetailsViewModel @Inject constructor(
 
     init {
         loadData()
+        loadGlobalSchedule()
     }
 
     private fun loadData() {
@@ -52,19 +55,39 @@ class ClientDetailsViewModel @Inject constructor(
 
             // 2. Get Sessions
             repository.getSessionsForClient(clientId).collect { sessions ->
-                // Sort sessions: Scheduled items first (Mon->Sun), then by time, then unscheduled
                 val sortedSessions = sessions.sortedWith(
                     compareBy(
-                        { it.scheduledDay ?: 8 },     // Days 1-7 first, null (8) last
-                        { it.scheduledHour ?: 25 },   // Hours 0-23 first, null (25) last
-                        { it.scheduledMinute ?: 61 }, // Minutes 0-59 first
-                        { it.name }                   // Fallback to name
+                        { it.scheduledDay ?: 8 },
+                        { it.scheduledHour ?: 25 },
+                        { it.scheduledMinute ?: 61 },
+                        { it.name }
                     )
                 )
 
                 val processedSessions = checkAndPerformWeeklyReset(client, sortedSessions)
                 _uiState.update { it.copy(sessions = processedSessions, isLoading = false) }
             }
+        }
+    }
+
+    private fun loadGlobalSchedule() {
+        viewModelScope.launch {
+            val allSessions = repository.getAllSessionsFromAllClients()
+            val map = mutableMapOf<Int, MutableList<Int>>()
+
+            allSessions.forEach { session ->
+                if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
+                    // Important: We include ALL sessions here.
+                    // If the user selects a session they are currently editing, we handle "ignoring self"
+                    // in the UI or let them see it as occupied (which implies they are moving it).
+                    // Ideally, we should filter out the *specific* session being edited, but we don't know
+                    // which one is being edited in this generic load function.
+                    // We will filter it in the Dialog or pass the ID to ignore.
+                    val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
+                    list.add(session.scheduledHour)
+                }
+            }
+            _uiState.update { it.copy(globalOccupiedSlots = map) }
         }
     }
 
@@ -122,6 +145,8 @@ class ClientDetailsViewModel @Inject constructor(
         _uiState.update { it.copy(sessions = reorderedWithSwappedSchedules) }
         viewModelScope.launch {
             repository.updateClientSessionsOrder(clientId, reorderedWithSwappedSchedules)
+            // Trigger global refresh to update occupied slots (in case we swapped times)
+            loadGlobalSchedule()
         }
     }
 
@@ -129,11 +154,14 @@ class ClientDetailsViewModel @Inject constructor(
         val updated =
             session.copy(scheduledDay = day, scheduledHour = hour, scheduledMinute = minute)
         updateSession(updated)
+        // Refresh occupied slots
+        loadGlobalSchedule()
     }
 
     fun toggleSkipSession(session: Session) {
         val updated = session.copy(isSkippedThisWeek = !session.isSkippedThisWeek)
         updateSession(updated)
+        loadGlobalSchedule()
     }
 
     // --- Basic CRUD ---
@@ -152,6 +180,7 @@ class ClientDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.deleteSession(clientId, session.id)
+                loadGlobalSchedule()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to delete: ${e.message}") }
             }

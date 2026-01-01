@@ -9,26 +9,26 @@ import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.ClientStatus
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.ClientRepository
+import uk.co.fireburn.raiform.widget.RaiFormWidgetUpdater
 import javax.inject.Inject
 
 class ClientRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val widgetUpdater: RaiFormWidgetUpdater // Injected Updater
 ) : ClientRepository {
 
     private val clientsCollection = firestore.collection("clients")
 
     override fun getClients(): Flow<List<Client>> = callbackFlow {
-        // Subscribe to real-time updates
         val listener = clientsCollection
-            .whereNotEqualTo("status", "REMOVED") // Filter out archived clients
+            .whereNotEqualTo("status", "REMOVED")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error) // Close stream on error
+                    close(error)
                     return@addSnapshotListener
                 }
 
                 val clients = snapshot?.documents?.mapNotNull { doc ->
-                    // Manual mapping to ensure Domain integrity
                     val id = doc.id
                     val name = doc.getString("name") ?: "Unknown"
                     val statusStr = doc.getString("status") ?: "ACTIVE"
@@ -39,14 +39,13 @@ class ClientRepositoryImpl @Inject constructor(
                     }
                     val dateAdded = doc.getLong("dateAdded") ?: System.currentTimeMillis()
                     val notes = doc.getString("notes") ?: ""
+                    val resetDay = doc.getLong("weeklyResetDay")?.toInt() ?: 7
 
-                    Client(id, name, status, notes, dateAdded)
+                    Client(id, name, status, notes, dateAdded, resetDay)
                 } ?: emptyList()
 
                 trySend(clients)
             }
-
-        // Unregister listener when the Flow is cancelled (e.g., user leaves screen)
         awaitClose { listener.remove() }
     }
 
@@ -67,36 +66,35 @@ class ClientRepositoryImpl @Inject constructor(
             name = name,
             status = status,
             notes = snapshot.getString("notes") ?: "",
-            dateAdded = snapshot.getLong("dateAdded") ?: 0L
+            dateAdded = snapshot.getLong("dateAdded") ?: 0L,
+            weeklyResetDay = snapshot.getLong("weeklyResetDay")?.toInt() ?: 7
         )
     }
 
     override suspend fun saveClient(client: Client) {
         clientsCollection.document(client.id).set(client).await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override suspend fun archiveClient(clientId: String) {
         clientsCollection.document(clientId)
             .update("status", ClientStatus.REMOVED.name)
             .await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override suspend fun saveClientWithSessions(client: Client, sessions: List<Session>) {
         val batch = firestore.batch()
-
-        // 1. Set Client Ref
         val clientRef = clientsCollection.document(client.id)
         batch.set(clientRef, client)
 
-        // 2. Set Sessions (Sub-collection)
         val sessionsCollection = clientRef.collection("sessions")
         sessions.forEach { session ->
             val sessionRef = sessionsCollection.document(session.id)
             batch.set(sessionRef, session)
         }
-
-        // 3. Commit atomically
         batch.commit().await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override fun getArchivedClients(): Flow<List<Client>> = callbackFlow {
@@ -108,7 +106,6 @@ class ClientRepositoryImpl @Inject constructor(
                     return@addSnapshotListener
                 }
                 val clients = snapshot?.documents?.mapNotNull { doc ->
-                    // ... (Use same mapping logic as getClients, but map 'weeklyResetDay' too) ...
                     val id = doc.id
                     val name = doc.getString("name") ?: "Unknown"
                     val status = ClientStatus.REMOVED
@@ -127,11 +124,10 @@ class ClientRepositoryImpl @Inject constructor(
         clientsCollection.document(clientId)
             .update("status", ClientStatus.ACTIVE.name)
             .await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override suspend fun updateClientSessionsOrder(clientId: String, sessions: List<Session>) {
-        // In Firestore, rewriting the whole subcollection list is tricky if we don't have a wrapper.
-        // For simplicity in this architecture, we update each document in a batch.
         val batch = firestore.batch()
         val sessionsRef = clientsCollection.document(clientId).collection("sessions")
 
@@ -139,6 +135,7 @@ class ClientRepositoryImpl @Inject constructor(
             batch.set(sessionsRef.document(session.id), session)
         }
         batch.commit().await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override fun getSessionsForClient(clientId: String): Flow<List<Session>> = callbackFlow {
@@ -151,7 +148,7 @@ class ClientRepositoryImpl @Inject constructor(
                 }
 
                 val sessions = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(Session::class.java) // POKO auto-mapping works well for simple nested lists
+                    doc.toObject(Session::class.java)
                 } ?: emptyList()
 
                 trySend(sessions)
@@ -164,8 +161,9 @@ class ClientRepositoryImpl @Inject constructor(
             .document(clientId)
             .collection("sessions")
             .document(session.id)
-            .set(session) // Overwrites the session with new exercise data
+            .set(session)
             .await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override suspend fun deleteSession(clientId: String, sessionId: String) {
@@ -174,12 +172,10 @@ class ClientRepositoryImpl @Inject constructor(
             .document(sessionId)
             .delete()
             .await()
+        widgetUpdater.triggerUpdate() // Update Widget
     }
 
     override suspend fun getAllSessionsFromAllClients(): List<Session> {
-        // Fetches all clients, then all their sub-collections.
-        // Note: In a massive production app, you'd use a Collection Group Query.
-        // For a PT app ( < 100 clients), iterating is fine and cost-effective.
         val clientsSnapshot = clientsCollection
             .whereNotEqualTo("status", "REMOVED")
             .get().await()
