@@ -12,6 +12,7 @@ import androidx.glance.GlanceTheme
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
@@ -44,6 +45,9 @@ import java.time.LocalDateTime
 
 class RaiFormWidget : GlanceAppWidget() {
 
+    // CHANGED: Use Exact mode to reliably detect size changes
+    override val sizeMode = SizeMode.Exact
+
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface RepositoryEntryPoint {
@@ -51,7 +55,6 @@ class RaiFormWidget : GlanceAppWidget() {
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // 1. Dependency Injection Setup
         val appContext = context.applicationContext
         val entryPoint = EntryPointAccessors.fromApplication(
             appContext,
@@ -59,33 +62,25 @@ class RaiFormWidget : GlanceAppWidget() {
         )
         val repository = entryPoint.clientRepository()
 
-        // 2. Fetch Data & Build Maps
         val clients = repository.getClients().firstOrNull() ?: emptyList()
         val sessionOwnerMap = mutableMapOf<String, Client>()
         val todaysSessions = mutableListOf<Session>()
 
         val now = LocalDateTime.now()
-        val todayDow = now.dayOfWeek.value // 1=Mon .. 7=Sun
+        val todayDow = now.dayOfWeek.value
 
-        // Iterate all clients to find today's sessions
         for (client in clients) {
             val clientSessions =
                 repository.getSessionsForClient(client.id).firstOrNull() ?: emptyList()
-
             clientSessions.forEach { session ->
-                // Check if session is today and active
                 if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
                     todaysSessions.add(session)
                     sessionOwnerMap[session.id] = client
                 }
             }
         }
-
-        // Sort by time
         todaysSessions.sortBy { it.scheduledHour ?: 24 }
-
-        // 3. Logic Flags
-        val isSchedulingDay = (todayDow == 7) // Sunday
+        val isSchedulingDay = (todayDow == 7)
 
         provideContent {
             GlanceTheme {
@@ -107,13 +102,12 @@ class RaiFormWidget : GlanceAppWidget() {
         isSchedulingDay: Boolean
     ) {
         val size = LocalSize.current
-        // Breakpoint: Height < 180dp usually implies a 2x1 or 4x1 row (Small)
         val isSmall = size.height < 180.dp
 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(Color(0xFF121212)) // App Background Color
+                .background(Color(0xFF121212))
                 .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -121,7 +115,6 @@ class RaiFormWidget : GlanceAppWidget() {
                 EmptyState(context, isSchedulingDay)
             } else {
                 if (isSmall) {
-                    // --- SMALL VIEW (Next Session Only) ---
                     val nextSession = findNextSession(sessions) ?: sessions.first()
                     val client = sessionOwnerMap[nextSession.id]
 
@@ -142,7 +135,7 @@ class RaiFormWidget : GlanceAppWidget() {
                                 nextSession.scheduledMinute ?: 0
                             ),
                             style = TextStyle(
-                                color = ColorProvider(Color(0xFFF7D02C)), // ElectricYellow
+                                color = ColorProvider(Color(0xFFF7D02C)),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
@@ -165,7 +158,6 @@ class RaiFormWidget : GlanceAppWidget() {
                         )
                     }
                 } else {
-                    // --- LARGE VIEW (List) ---
                     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                         items(sessions) { session ->
                             val client = sessionOwnerMap[session.id]
@@ -174,7 +166,7 @@ class RaiFormWidget : GlanceAppWidget() {
                                 modifier = GlanceModifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
-                                    .background(Color(0xFF1E1E1E)) // Card BG
+                                    .background(Color(0xFF1E1E1E))
                                     .padding(8.dp)
                                     .clickable(
                                         actionStartActivity(
@@ -257,7 +249,6 @@ class RaiFormWidget : GlanceAppWidget() {
 
     private fun findNextSession(sessions: List<Session>): Session? {
         val now = LocalDateTime.now()
-        // Find first session that is effectively "later today"
         return sessions.firstOrNull {
             val h = it.scheduledHour ?: 0
             val m = it.scheduledMinute ?: 0
@@ -280,7 +271,7 @@ class RaiFormWidget : GlanceAppWidget() {
         return Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("navigation_target", type) // 'session', 'scheduler', 'dashboard'
+            putExtra("navigation_target", type)
             if (clientId != null) putExtra("client_id", clientId)
             if (sessionId != null) putExtra("session_id", sessionId)
         }

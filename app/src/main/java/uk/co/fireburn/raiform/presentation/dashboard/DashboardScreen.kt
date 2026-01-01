@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.ui.theme.ZeraoraGradient
@@ -73,14 +77,21 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // --- Local Dialog States ---
+    // Auto-refresh when returning to screen
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
-    // 1. Add Client Dialog State
     var showAddClientDialog by remember { mutableStateOf(false) }
     var newClientName by remember { mutableStateOf("") }
-
-    // 2. Rename Client Dialog State
     var clientToRename by remember { mutableStateOf<Client?>(null) }
 
     Scaffold(
@@ -100,12 +111,10 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            // Stack of Action Buttons
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Archived Clients (Small Button)
                 SmallFloatingActionButton(
                     onClick = { navController.navigate("archived_clients") },
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -114,19 +123,14 @@ fun DashboardScreen(
                     Icon(Icons.Default.Restore, contentDescription = "Archived Clients")
                 }
 
-                // 2. Main Scheduler (Clock Icon)
                 FloatingActionButton(
                     onClick = { navController.navigate("main_scheduler") },
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = Color.Black
                 ) {
-                    Icon(
-                        Icons.Default.CalendarMonth,
-                        contentDescription = "Scheduler"
-                    ) // CHANGED: "Global Scheduler" -> "Scheduler"
+                    Icon(Icons.Default.CalendarMonth, contentDescription = "Scheduler")
                 }
 
-                // 3. Add Client (Primary Button)
                 FloatingActionButton(
                     onClick = { showAddClientDialog = true },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -143,7 +147,6 @@ fun DashboardScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            // 1. Welcome / Status Card
             StatusCard(
                 activeCount = state.clients.size,
                 nextClientName = state.nextGlobalSessionClient,
@@ -152,9 +155,8 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 2. Client List Header
             Text(
-                text = "Active Clients",
+                text = "Clients", // CHANGED from "Active Clients"
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
@@ -162,7 +164,6 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 3. Client List Logic
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -174,33 +175,24 @@ fun DashboardScreen(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 120.dp) // Extra padding for the stack of FABs
+                    contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
                     items(state.clients) { client ->
-                        // Retrieve calculated status text
-                        val statusText = state.clientScheduleStatus[client.id] ?: "Active"
+                        val scheduleInfo = state.clientScheduleStatus[client.id]
 
                         ClientCard(
                             client = client,
-                            statusText = statusText,
-                            onClick = {
-                                navController.navigate("client_details/${client.id}")
-                            },
-                            onArchive = {
-                                viewModel.archiveClient(client)
-                            },
-                            onRename = {
-                                clientToRename = client
-                            }
+                            timeString = scheduleInfo?.timeString ?: "Active",
+                            sessionName = scheduleInfo?.nextSessionName,
+                            onClick = { navController.navigate("client_details/${client.id}") },
+                            onArchive = { viewModel.archiveClient(client) },
+                            onRename = { clientToRename = client }
                         )
                     }
                 }
             }
         }
 
-        // --- DIALOGS ---
-
-        // 1. New Client Dialog (Manual Entry or Link to Import)
         if (showAddClientDialog) {
             AlertDialog(
                 onDismissRequest = { showAddClientDialog = false },
@@ -214,10 +206,7 @@ fun DashboardScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        // Link to Smart Import
                         TextButton(
                             onClick = {
                                 showAddClientDialog = false
@@ -225,11 +214,7 @@ fun DashboardScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                Icons.Default.Bolt,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Icon(Icons.Default.Bolt, null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Use Smart Import instead")
                         }
@@ -242,9 +227,7 @@ fun DashboardScreen(
                             newClientName = ""
                             showAddClientDialog = false
                         }
-                    }) {
-                        Text("Create")
-                    }
+                    }) { Text("Create") }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddClientDialog = false }) { Text("Cancel") }
@@ -252,10 +235,8 @@ fun DashboardScreen(
             )
         }
 
-        // 2. Rename Client Dialog
         if (clientToRename != null) {
             var renameText by remember { mutableStateOf(clientToRename!!.name) }
-
             AlertDialog(
                 onDismissRequest = { clientToRename = null },
                 title = { Text("Rename Client") },
@@ -274,9 +255,7 @@ fun DashboardScreen(
                             viewModel.updateClientName(clientToRename!!, renameText)
                             clientToRename = null
                         }
-                    }) {
-                        Text("Save")
-                    }
+                    }) { Text("Save") }
                 },
                 dismissButton = {
                     TextButton(onClick = { clientToRename = null }) { Text("Cancel") }
@@ -287,11 +266,7 @@ fun DashboardScreen(
 }
 
 @Composable
-fun StatusCard(
-    activeCount: Int,
-    nextClientName: String?,
-    nextSessionTime: String?
-) {
+fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: String?) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,7 +289,7 @@ fun StatusCard(
                 )
                 if (nextClientName != null && nextSessionTime != null) {
                     Text(
-                        text = "$nextClientName",
+                        text = nextClientName,
                         style = MaterialTheme.typography.headlineMedium,
                         color = Color.Black,
                         fontWeight = FontWeight.ExtraBold
@@ -350,21 +325,19 @@ fun StatusCard(
 @Composable
 fun ClientCard(
     client: Client,
-    statusText: String,
+    timeString: String,
+    sessionName: String?,
     onClick: () -> Unit,
     onArchive: () -> Unit,
     onRename: () -> Unit
 ) {
-    // State to control the dropdown menu
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -373,7 +346,6 @@ fun ClientCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar Placeholder
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -391,74 +363,44 @@ fun ClientCard(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // CHANGED: Name - SessionName
+                val displayName =
+                    if (sessionName != null) "${client.name} - $sessionName" else client.name
                 Text(
-                    text = client.name,
+                    text = displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = statusText,
+                    text = timeString,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (statusText.contains("No sessions")) Color.Gray else MaterialTheme.colorScheme.primary
+                    color = if (timeString.contains("No sessions")) Color.Gray else MaterialTheme.colorScheme.primary
                 )
             }
 
-            // Menu Box
             Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Options",
+                        Icons.Default.MoreVert,
+                        "Options",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    // 1. Rename Option
                     DropdownMenuItem(
-                        text = {
-                            Text(
-                                "Edit Name",
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        },
-                        onClick = {
-                            showMenu = false
-                            onRename()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        text = { Text("Edit Name") },
+                        onClick = { showMenu = false; onRename() },
+                        leadingIcon = { Icon(Icons.Default.Edit, null) }
                     )
-
-                    // 2. Archive Option
                     DropdownMenuItem(
-                        text = {
-                            Text(
-                                "Archive Client",
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        },
-                        onClick = {
-                            showMenu = false
-                            onArchive()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Archive,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                        text = { Text("Archive Client") },
+                        onClick = { showMenu = false; onArchive() },
+                        leadingIcon = { Icon(Icons.Default.Archive, null) }
                     )
                 }
             }
@@ -475,10 +417,10 @@ fun EmptyState(onImportClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            imageVector = Icons.Default.Person,
-            contentDescription = null,
-            modifier = Modifier.size(60.dp),
-            tint = MaterialTheme.colorScheme.surfaceVariant
+            Icons.Default.Person,
+            null,
+            Modifier.size(60.dp),
+            MaterialTheme.colorScheme.surfaceVariant
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(

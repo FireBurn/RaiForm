@@ -22,10 +22,15 @@ import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import javax.inject.Inject
 
+data class ClientScheduleInfo(
+    val timeString: String,
+    val nextSessionName: String? = null
+)
+
 data class DashboardUiState(
     val clients: List<Client> = emptyList(),
-    // Map of ClientID -> Formatted String (e.g., "Monday @ 4pm")
-    val clientScheduleStatus: Map<String, String> = emptyMap(),
+    // Map of ClientID -> Schedule Info
+    val clientScheduleStatus: Map<String, ClientScheduleInfo> = emptyMap(),
     // Data for the top card
     val nextGlobalSessionClient: String? = null,
     val nextGlobalSessionTime: String? = null,
@@ -45,6 +50,16 @@ class DashboardViewModel @Inject constructor(
         fetchClients()
     }
 
+    // Public refresh method called from UI onResume
+    fun refresh() {
+        val currentClients = _uiState.value.clients
+        if (currentClients.isNotEmpty()) {
+            viewModelScope.launch {
+                calculateSchedules(currentClients)
+            }
+        }
+    }
+
     private fun fetchClients() {
         viewModelScope.launch {
             repository.getClients()
@@ -57,7 +72,7 @@ class DashboardViewModel @Inject constructor(
                     }
                 }
                 .collect { clientList ->
-                    // 1. Initial State: Sort by date added temporarily while we calculate schedules
+                    // 1. Initial Sort
                     val initialSort = clientList.sortedByDescending { c -> c.dateAdded }
                     _uiState.update {
                         it.copy(
@@ -66,15 +81,15 @@ class DashboardViewModel @Inject constructor(
                         )
                     }
 
-                    // 2. Asynchronously calculate schedules AND re-sort based on time
+                    // 2. Calculate schedules
                     calculateSchedules(clientList)
                 }
         }
     }
 
     private suspend fun calculateSchedules(clients: List<Client>) {
-        val scheduleMap = mutableMapOf<String, String>()
-        val nextSessionDates = mutableMapOf<String, LocalDateTime>() // Store raw dates for sorting
+        val scheduleMap = mutableMapOf<String, ClientScheduleInfo>()
+        val nextSessionDates = mutableMapOf<String, LocalDateTime>()
 
         var globalNextTime: LocalDateTime? = null
         var globalNextClientName: String? = null
@@ -84,54 +99,47 @@ class DashboardViewModel @Inject constructor(
 
         clients.forEach { client ->
             try {
-                // Fetch sessions for this client (One-shot from Flow)
+                // Fetch fresh sessions
                 val sessions = repository.getSessionsForClient(client.id).first()
 
-                // Find the nearest upcoming session
                 val nextSessionData = getNextSessionDate(sessions, now)
 
                 if (nextSessionData != null) {
-                    val (_, date) = nextSessionData
+                    val (session, date) = nextSessionData
                     val formatted = formatSessionTime(date, now)
 
-                    scheduleMap[client.id] = formatted
-                    nextSessionDates[client.id] = date // Capture date for sorting
+                    scheduleMap[client.id] = ClientScheduleInfo(formatted, session.name)
+                    nextSessionDates[client.id] = date
 
-                    // Check if this is the "Most immediate" global session
                     if (globalNextTime == null || date.isBefore(globalNextTime)) {
                         globalNextTime = date
                         globalNextClientName = client.name
                         globalFormattedTime = formatted
                     }
                 } else {
-                    scheduleMap[client.id] = "No sessions scheduled"
+                    scheduleMap[client.id] = ClientScheduleInfo("No sessions scheduled")
                 }
             } catch (e: Exception) {
-                scheduleMap[client.id] = "Error loading schedule"
+                scheduleMap[client.id] = ClientScheduleInfo("Error loading schedule")
             }
         }
 
-        // --- SORTING LOGIC ---
-        // 1. Has Next Session (Sooner = Higher)
-        // 2. No Next Session (Alphabetical)
+        // Sort: Time Priority -> Alphabetical
         val sortedClients = clients.sortedWith { a, b ->
             val dateA = nextSessionDates[a.id]
             val dateB = nextSessionDates[b.id]
 
             when {
-                dateA != null && dateB != null -> dateA.compareTo(dateB) // Both have dates: Ascending time
-                dateA != null -> -1 // A has date, B doesn't -> A first
-                dateB != null -> 1  // B has date, A doesn't -> B first
-                else -> a.name.compareTo(
-                    b.name,
-                    ignoreCase = true
-                ) // Neither has date -> Alphabetical
+                dateA != null && dateB != null -> dateA.compareTo(dateB)
+                dateA != null -> -1
+                dateB != null -> 1
+                else -> a.name.compareTo(b.name, ignoreCase = true)
             }
         }
 
         _uiState.update {
             it.copy(
-                clients = sortedClients, // Apply the new sort order
+                clients = sortedClients,
                 clientScheduleStatus = scheduleMap,
                 nextGlobalSessionClient = globalNextClientName,
                 nextGlobalSessionTime = globalFormattedTime,
@@ -140,7 +148,6 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Helper: Find the soonest session in the future (or later today)
     private fun getNextSessionDate(
         sessions: List<Session>,
         now: LocalDateTime
@@ -159,13 +166,12 @@ class DashboardViewModel @Inject constructor(
             val hour = session.scheduledHour!!
             val minute = session.scheduledMinute ?: 0
 
-            // Calculate date relative to NOW
             var date = now.with(TemporalAdjusters.nextOrSame(dayOfWeek))
                 .withHour(hour)
                 .withMinute(minute)
                 .withSecond(0)
 
-            // If the calculated time is in the past (e.g. it's Monday 5pm, session was Monday 10am), move to next week
+            // If strictly in the past (e.g. today but earlier), move to next week
             if (date.isBefore(now)) {
                 date = date.plusWeeks(1)
             }
@@ -213,10 +219,9 @@ class DashboardViewModel @Inject constructor(
     fun addClient(name: String) {
         viewModelScope.launch {
             try {
-                val newClient = Client(name = name.toTitleCase())
-                repository.saveClient(newClient)
+                repository.saveClient(Client(name = name.toTitleCase()))
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Error adding client: ${e.message}") }
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }
@@ -224,10 +229,9 @@ class DashboardViewModel @Inject constructor(
     fun updateClientName(client: Client, newName: String) {
         viewModelScope.launch {
             try {
-                val updatedClient = client.copy(name = newName.toTitleCase())
-                repository.saveClient(updatedClient)
+                repository.saveClient(client.copy(name = newName.toTitleCase()))
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Error updating client: ${e.message}") }
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }
@@ -237,7 +241,7 @@ class DashboardViewModel @Inject constructor(
             try {
                 repository.archiveClient(client.id)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Could not archive: ${e.message}") }
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }

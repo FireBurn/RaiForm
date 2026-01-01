@@ -1,6 +1,8 @@
 package uk.co.fireburn.raiform.presentation.client_details
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -37,7 +40,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -49,10 +51,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import org.burnoutcrew.reorderable.ReorderableItem
@@ -60,6 +64,7 @@ import org.burnoutcrew.reorderable.detectReorderAfterLongPress
 import org.burnoutcrew.reorderable.rememberReorderableLazyListState
 import org.burnoutcrew.reorderable.reorderable
 import uk.co.fireburn.raiform.domain.model.Session
+import uk.co.fireburn.raiform.presentation.components.DartboardClock
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -72,21 +77,14 @@ fun ClientDetailsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    // Dialog States
     var showAddDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
-
-    // Scheduling Dialog
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
-
-    // Rename Dialog
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
-    // Reorder State
     val reorderState = rememberReorderableLazyListState(
         onMove = { from, to ->
             val list = viewModel.uiState.value.sessions.toMutableList()
-
             if (from.index in list.indices && to.index in list.indices) {
                 val item = list.removeAt(from.index)
                 list.add(to.index, item)
@@ -138,7 +136,6 @@ fun ClientDetailsScreen(
                 items(state.sessions, key = { it.id }) { session ->
                     ReorderableItem(reorderState, key = session.id) { isDragging ->
                         val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
-
                         Box(modifier = Modifier.shadow(elevation.value)) {
                             SessionCard(
                                 session = session,
@@ -157,7 +154,6 @@ fun ClientDetailsScreen(
                                     Icon(
                                         Icons.Default.DragHandle,
                                         contentDescription = "Reorder",
-                                        // FIX: Use proper detection modifier for this library version
                                         modifier = Modifier.detectReorderAfterLongPress(reorderState)
                                     )
                                 }
@@ -169,23 +165,18 @@ fun ClientDetailsScreen(
             }
         }
 
-        // --- DIALOGS ---
-
-        // 1. Scheduler Dialog
         if (sessionToSchedule != null) {
-            ScheduleDialog(
+            DartboardScheduleDialog(
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
-                currentHour = sessionToSchedule!!.scheduledHour ?: 9,
-                currentMinute = sessionToSchedule!!.scheduledMinute ?: 0,
+                currentHour = sessionToSchedule!!.scheduledHour ?: -1,
                 onDismiss = { sessionToSchedule = null },
-                onSave = { d, h, m ->
-                    viewModel.updateSchedule(sessionToSchedule!!, d, h, m)
+                onSave = { d, h ->
+                    viewModel.updateSchedule(sessionToSchedule!!, d, h, 0)
                     sessionToSchedule = null
                 }
             )
         }
 
-        // 2. Add Session Dialog
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false },
@@ -213,7 +204,6 @@ fun ClientDetailsScreen(
             )
         }
 
-        // 3. Rename Dialog
         if (sessionToRename != null) {
             var renameText by remember { mutableStateOf(sessionToRename!!.name) }
             AlertDialog(
@@ -305,7 +295,8 @@ fun SessionCard(
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Schedule") },
+                        // CHANGED: "Reschedule" if scheduled, else "Schedule"
+                        text = { Text(if (session.scheduledDay != null) "Reschedule" else "Schedule") },
                         onClick = { showMenu = false; onAction(SessionAction.Schedule) },
                         leadingIcon = { Icon(Icons.Default.Schedule, null) }
                     )
@@ -336,46 +327,61 @@ fun SessionCard(
     }
 }
 
+// CHANGED: New Dartboard Dialog
 @Composable
-fun ScheduleDialog(
+fun DartboardScheduleDialog(
     currentDay: Int,
     currentHour: Int,
-    currentMinute: Int,
     onDismiss: () -> Unit,
-    onSave: (Int, Int, Int) -> Unit
+    onSave: (Int, Int) -> Unit
 ) {
     var selectedDay by remember { mutableStateOf(currentDay) }
-    var selectedHour by remember { mutableStateOf(currentHour) }
-    var selectedMinute by remember { mutableStateOf(currentMinute) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set Schedule") },
+        title = { Text("Schedule Session") },
         text = {
-            Column {
-                Text("Day of Week (1=Mon ... 7=Sun)")
-                Slider(
-                    value = selectedDay.toFloat(),
-                    onValueChange = { selectedDay = it.toInt() },
-                    valueRange = 1f..7f,
-                    steps = 5
-                )
-                Text(DayOfWeek.of(selectedDay).name)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Day Selection Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    for (day in 1..7) {
+                        val dayName =
+                            DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                        val isSelected = (day == selectedDay)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                .clickable { selectedDay = day },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dayName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
 
-                Spacer(Modifier.height(16.dp))
-
-                Text("Hour (0-23)")
-                Slider(
-                    value = selectedHour.toFloat(),
-                    onValueChange = { selectedHour = it.toInt() },
-                    valueRange = 0f..23f
+                // Dartboard
+                DartboardClock(
+                    takenHours = emptyList(), // Not checking conflicts for now
+                    selectedHour = currentHour,
+                    onHourSelected = { hour -> onSave(selectedDay, hour) }
                 )
-                Text("$selectedHour:${String.format("%02d", selectedMinute)}")
             }
         },
-        confirmButton = {
-            Button(onClick = { onSave(selectedDay, selectedHour, selectedMinute) }) { Text("Save") }
-        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
