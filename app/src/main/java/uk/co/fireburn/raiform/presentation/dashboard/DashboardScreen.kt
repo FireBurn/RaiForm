@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -79,7 +80,6 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Auto-refresh when returning to screen
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -104,9 +104,16 @@ fun DashboardScreen(
                         letterSpacing = 2.sp
                     )
                 },
+                // CHANGED: Added Actions
+                actions = {
+                    IconButton(onClick = { navController.navigate("settings") }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.primary
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
@@ -156,7 +163,7 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Clients", // CHANGED from "Active Clients"
+                text = "Clients",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
@@ -265,6 +272,7 @@ fun DashboardScreen(
     }
 }
 
+// ... (Rest of ClientCard / EmptyState remains same) ...
 @Composable
 fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: String?) {
     Card(
