@@ -120,7 +120,10 @@ fun DashboardScreen(
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = Color.Black
                 ) {
-                    Icon(Icons.Default.CalendarMonth, contentDescription = "Global Scheduler")
+                    Icon(
+                        Icons.Default.CalendarMonth,
+                        contentDescription = "Scheduler"
+                    ) // CHANGED: "Global Scheduler" -> "Scheduler"
                 }
 
                 // 3. Add Client (Primary Button)
@@ -141,7 +144,6 @@ fun DashboardScreen(
                 .padding(horizontal = 16.dp)
         ) {
             // 1. Welcome / Status Card
-            // CHANGED: Now accepts optional strings for the next session info
             StatusCard(
                 activeCount = state.clients.size,
                 nextClientName = state.nextGlobalSessionClient,
@@ -175,7 +177,7 @@ fun DashboardScreen(
                     contentPadding = PaddingValues(bottom = 120.dp) // Extra padding for the stack of FABs
                 ) {
                     items(state.clients) { client ->
-                        // CHANGED: Retrieve calculated status text
+                        // Retrieve calculated status text
                         val statusText = state.clientScheduleStatus[client.id] ?: "Active"
 
                         ClientCard(
@@ -310,7 +312,6 @@ fun StatusCard(
                     color = Color.Black.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold
                 )
-                // CHANGED: Display logic for Next Session vs Active Count
                 if (nextClientName != null && nextSessionTime != null) {
                     Text(
                         text = "$nextClientName",
@@ -349,7 +350,7 @@ fun StatusCard(
 @Composable
 fun ClientCard(
     client: Client,
-    statusText: String, // CHANGED: New parameter
+    statusText: String,
     onClick: () -> Unit,
     onArchive: () -> Unit,
     onRename: () -> Unit
@@ -396,7 +397,6 @@ fun ClientCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                // CHANGED: Show dynamic status text
                 Text(
                     text = statusText,
                     style = MaterialTheme.typography.bodySmall,

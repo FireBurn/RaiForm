@@ -63,7 +63,7 @@ fun MainSchedulerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Global Scheduler") },
+                title = { Text("Scheduler") }, // CHANGED: "Global Scheduler" -> "Scheduler"
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

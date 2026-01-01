@@ -57,23 +57,25 @@ class DashboardViewModel @Inject constructor(
                     }
                 }
                 .collect { clientList ->
-                    // 1. Update basic client list first
-                    val sortedClients = clientList.sortedByDescending { c -> c.dateAdded }
+                    // 1. Initial State: Sort by date added temporarily while we calculate schedules
+                    val initialSort = clientList.sortedByDescending { c -> c.dateAdded }
                     _uiState.update {
                         it.copy(
-                            clients = sortedClients,
+                            clients = initialSort,
                             error = null
                         )
                     }
 
-                    // 2. Asynchronously calculate schedules
-                    calculateSchedules(sortedClients)
+                    // 2. Asynchronously calculate schedules AND re-sort based on time
+                    calculateSchedules(clientList)
                 }
         }
     }
 
     private suspend fun calculateSchedules(clients: List<Client>) {
         val scheduleMap = mutableMapOf<String, String>()
+        val nextSessionDates = mutableMapOf<String, LocalDateTime>() // Store raw dates for sorting
+
         var globalNextTime: LocalDateTime? = null
         var globalNextClientName: String? = null
         var globalFormattedTime: String? = null
@@ -91,7 +93,9 @@ class DashboardViewModel @Inject constructor(
                 if (nextSessionData != null) {
                     val (_, date) = nextSessionData
                     val formatted = formatSessionTime(date, now)
+
                     scheduleMap[client.id] = formatted
+                    nextSessionDates[client.id] = date // Capture date for sorting
 
                     // Check if this is the "Most immediate" global session
                     if (globalNextTime == null || date.isBefore(globalNextTime)) {
@@ -107,8 +111,27 @@ class DashboardViewModel @Inject constructor(
             }
         }
 
+        // --- SORTING LOGIC ---
+        // 1. Has Next Session (Sooner = Higher)
+        // 2. No Next Session (Alphabetical)
+        val sortedClients = clients.sortedWith { a, b ->
+            val dateA = nextSessionDates[a.id]
+            val dateB = nextSessionDates[b.id]
+
+            when {
+                dateA != null && dateB != null -> dateA.compareTo(dateB) // Both have dates: Ascending time
+                dateA != null -> -1 // A has date, B doesn't -> A first
+                dateB != null -> 1  // B has date, A doesn't -> B first
+                else -> a.name.compareTo(
+                    b.name,
+                    ignoreCase = true
+                ) // Neither has date -> Alphabetical
+            }
+        }
+
         _uiState.update {
             it.copy(
+                clients = sortedClients, // Apply the new sort order
                 clientScheduleStatus = scheduleMap,
                 nextGlobalSessionClient = globalNextClientName,
                 nextGlobalSessionTime = globalFormattedTime,
