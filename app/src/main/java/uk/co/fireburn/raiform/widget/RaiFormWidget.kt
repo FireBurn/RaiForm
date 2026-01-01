@@ -45,7 +45,6 @@ import java.time.LocalDateTime
 
 class RaiFormWidget : GlanceAppWidget() {
 
-    // CHANGED: Use Exact mode to reliably detect size changes
     override val sizeMode = SizeMode.Exact
 
     @EntryPoint
@@ -72,6 +71,7 @@ class RaiFormWidget : GlanceAppWidget() {
         for (client in clients) {
             val clientSessions =
                 repository.getSessionsForClient(client.id).firstOrNull() ?: emptyList()
+
             clientSessions.forEach { session ->
                 if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
                     todaysSessions.add(session)
@@ -79,7 +79,9 @@ class RaiFormWidget : GlanceAppWidget() {
                 }
             }
         }
+
         todaysSessions.sortBy { it.scheduledHour ?: 24 }
+
         val isSchedulingDay = (todayDow == 7)
 
         provideContent {
@@ -259,7 +261,8 @@ class RaiFormWidget : GlanceAppWidget() {
     private fun formatTime(hour: Int, minute: Int): String {
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
-        return String.format("%d:%02d%s", h, minute, amPm)
+        // CHANGED: Hide minutes if 0
+        return if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
     }
 
     private fun getIntent(
@@ -271,7 +274,7 @@ class RaiFormWidget : GlanceAppWidget() {
         return Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("navigation_target", type)
+            putExtra("navigation_target", type) // 'session', 'scheduler', 'dashboard'
             if (clientId != null) putExtra("client_id", clientId)
             if (sessionId != null) putExtra("session_id", sessionId)
         }

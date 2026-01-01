@@ -11,7 +11,6 @@ class RaiFormWidgetUpdater @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     suspend fun triggerUpdate() {
-        // Forces all instances of the RaiFormWidget to refresh their data
         RaiFormWidget().updateAll(context)
     }
 }

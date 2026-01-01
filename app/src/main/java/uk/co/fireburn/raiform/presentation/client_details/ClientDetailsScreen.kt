@@ -169,14 +169,8 @@ fun ClientDetailsScreen(
             DartboardScheduleDialog(
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
                 currentHour = sessionToSchedule!!.scheduledHour ?: -1,
-                // Pass global slots but remove the *current* session's slot if it's there,
-                // so the user can re-select the same time if they just want to adjust minutes (although we only do hours now).
-                // Or simply: The user should be able to click the current hour.
                 globalOccupiedSlots = state.globalOccupiedSlots,
-                sessionToIgnoreId = sessionToSchedule!!.id, // We need to know which session to ignore in logic?
-                // Actually, the globalOccupiedSlots contains this session. We should subtract it.
-                // However, viewModel.loadGlobalSchedule() includes it.
-                // We'll handle logic inside the dialog.
+                sessionToIgnoreId = sessionToSchedule!!.id,
                 onDismiss = { sessionToSchedule = null },
                 onSave = { d, h ->
                     viewModel.updateSchedule(sessionToSchedule!!, d, h, 0)
@@ -257,8 +251,13 @@ fun SessionCard(
     } else if (session.scheduledDay != null) {
         val day =
             DayOfWeek.of(session.scheduledDay).getDisplayName(TextStyle.SHORT, Locale.getDefault())
-        val time =
-            String.format("%02d:%02d", session.scheduledHour ?: 0, session.scheduledMinute ?: 0)
+        val hour = session.scheduledHour ?: 0
+        val minute = session.scheduledMinute ?: 0
+        val amPm = if (hour >= 12) "pm" else "am"
+        val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
+
+        // CHANGED: Hide minutes if 0
+        val time = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
         "$day @ $time"
     } else {
         "Unscheduled"
@@ -339,20 +338,13 @@ fun DartboardScheduleDialog(
     currentDay: Int,
     currentHour: Int,
     globalOccupiedSlots: Map<Int, List<Int>>,
-    sessionToIgnoreId: String, // Ideally use this to filter, but for now we'll allow selecting currentHour even if marked taken
+    sessionToIgnoreId: String,
     onDismiss: () -> Unit,
     onSave: (Int, Int) -> Unit
 ) {
     var selectedDay by remember { mutableStateOf(currentDay) }
 
-    // Get taken slots for selected day
     val takenForDay = globalOccupiedSlots[selectedDay] ?: emptyList()
-
-    // Logic: If the selectedDay is the same as currentDay (where the session is currently scheduled),
-    // we should effectively "untake" the currentHour from the visual red block so the user can keep it.
-    // However, simplest UX: Pass 'takenForDay' to the clock. If 'currentHour' is in it,
-    // the clock usually shows it as red. But we want to allow selecting it.
-    // We will filter out 'currentHour' from 'takenForDay' ONLY if selectedDay == currentDay.
     val displayTaken = if (selectedDay == currentDay) {
         takenForDay.filter { it != currentHour }
     } else {
@@ -364,7 +356,6 @@ fun DartboardScheduleDialog(
         title = { Text("Schedule Session") },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Day Selection Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -395,10 +386,9 @@ fun DartboardScheduleDialog(
                     }
                 }
 
-                // Dartboard
                 DartboardClock(
                     takenHours = displayTaken,
-                    selectedHour = currentHour, // Highlights current selection
+                    selectedHour = currentHour,
                     onHourSelected = { hour -> onSave(selectedDay, hour) }
                 )
             }

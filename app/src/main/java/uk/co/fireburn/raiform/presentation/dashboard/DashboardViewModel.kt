@@ -29,9 +29,7 @@ data class ClientScheduleInfo(
 
 data class DashboardUiState(
     val clients: List<Client> = emptyList(),
-    // Map of ClientID -> Schedule Info
     val clientScheduleStatus: Map<String, ClientScheduleInfo> = emptyMap(),
-    // Data for the top card
     val nextGlobalSessionClient: String? = null,
     val nextGlobalSessionTime: String? = null,
     val isLoading: Boolean = true,
@@ -50,7 +48,6 @@ class DashboardViewModel @Inject constructor(
         fetchClients()
     }
 
-    // Public refresh method called from UI onResume
     fun refresh() {
         val currentClients = _uiState.value.clients
         if (currentClients.isNotEmpty()) {
@@ -72,7 +69,6 @@ class DashboardViewModel @Inject constructor(
                     }
                 }
                 .collect { clientList ->
-                    // 1. Initial Sort
                     val initialSort = clientList.sortedByDescending { c -> c.dateAdded }
                     _uiState.update {
                         it.copy(
@@ -80,8 +76,6 @@ class DashboardViewModel @Inject constructor(
                             error = null
                         )
                     }
-
-                    // 2. Calculate schedules
                     calculateSchedules(clientList)
                 }
         }
@@ -99,9 +93,7 @@ class DashboardViewModel @Inject constructor(
 
         clients.forEach { client ->
             try {
-                // Fetch fresh sessions
                 val sessions = repository.getSessionsForClient(client.id).first()
-
                 val nextSessionData = getNextSessionDate(sessions, now)
 
                 if (nextSessionData != null) {
@@ -124,7 +116,6 @@ class DashboardViewModel @Inject constructor(
             }
         }
 
-        // Sort: Time Priority -> Alphabetical
         val sortedClients = clients.sortedWith { a, b ->
             val dateA = nextSessionDates[a.id]
             val dateB = nextSessionDates[b.id]
@@ -171,7 +162,6 @@ class DashboardViewModel @Inject constructor(
                 .withMinute(minute)
                 .withSecond(0)
 
-            // If strictly in the past (e.g. today but earlier), move to next week
             if (date.isBefore(now)) {
                 date = date.plusWeeks(1)
             }
@@ -190,12 +180,13 @@ class DashboardViewModel @Inject constructor(
     private fun formatSessionTime(date: LocalDateTime, now: LocalDateTime): String {
         val dayDiff = ChronoUnit.DAYS.between(now.toLocalDate(), date.toLocalDate())
 
-        val timeStr = String.format(
-            "%d:%02d%s",
-            if (date.hour > 12) date.hour - 12 else if (date.hour == 0) 12 else date.hour,
-            date.minute,
-            if (date.hour >= 12) "pm" else "am"
-        )
+        val hour = date.hour
+        val minute = date.minute
+        val amPm = if (hour >= 12) "pm" else "am"
+        val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
+
+        // CHANGED: Hide minutes if 0
+        val timeStr = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
 
         return when {
             dayDiff == 0L -> "Today @ $timeStr"
