@@ -60,7 +60,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+// UPDATED IMPORT
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -70,7 +71,7 @@ import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
 
-// Enum defined at top level
+// Enum defined at top level to ensure visibility
 enum class SessionAction { Rename, Delete, Schedule, ToggleSkip }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,6 +80,7 @@ fun ClientDetailsScreen(
     navController: NavController,
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
+    // ... (rest of the file remains unchanged)
     val state by viewModel.uiState.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -86,11 +88,9 @@ fun ClientDetailsScreen(
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
-    // Reorderable State
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         val list = state.sessions.toMutableList()
-        // Ensure indices are within bounds and valid
         val fromIndex = from.index
         val toIndex = to.index
         if (fromIndex in list.indices && toIndex in list.indices) {
@@ -187,7 +187,6 @@ fun ClientDetailsScreen(
             }
         }
 
-        // ... (Dialogs remain unchanged) ...
         if (sessionToSchedule != null) {
             DartboardScheduleDialog(
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
@@ -258,7 +257,6 @@ fun ClientDetailsScreen(
     }
 }
 
-// ... (Helper Composables like SessionCard, DartboardScheduleDialog remain unchanged) ...
 @Composable
 fun SessionCard(
     session: Session,

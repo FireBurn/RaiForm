@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.presentation.active_session
 
+// UPDATED IMPORT
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -74,6 +75,7 @@ fun ActiveSessionScreen(
     navController: NavController,
     viewModel: ActiveSessionViewModel = hiltViewModel()
 ) {
+    // ... (rest of the file content remains exactly the same)
     val state by viewModel.uiState.collectAsState()
     val session = state.session
 
@@ -213,7 +215,6 @@ fun ActiveSessionScreen(
     }
 }
 
-// ... (Rest of ActivityExerciseCard, ExerciseDialog, DataBadge remain unchanged) ...
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,

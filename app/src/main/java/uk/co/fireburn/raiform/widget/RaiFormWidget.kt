@@ -37,7 +37,9 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withContext
 import uk.co.fireburn.raiform.MainActivity
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.Session
@@ -62,54 +64,72 @@ class RaiFormWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
-        try {
-            val entryPoint = EntryPointAccessors.fromApplication(
-                appContext,
-                RepositoryEntryPoint::class.java
-            )
-            val repository = entryPoint.clientRepository()
-            val settingsRepo = entryPoint.settingsRepository()
 
-            val dataMap = repository.getClientsAndSessions()
-            val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
+        // Use IO dispatcher for DB operations
+        withContext(Dispatchers.IO) {
+            try {
+                val entryPoint = EntryPointAccessors.fromApplication(
+                    appContext,
+                    RepositoryEntryPoint::class.java
+                )
+                val repository = entryPoint.clientRepository()
+                val settingsRepo = entryPoint.settingsRepository()
 
-            val sessionOwnerMap = mutableMapOf<String, Client>()
-            val todaysSessions = mutableListOf<Session>()
+                // Fetch data safely
+                val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
+                val dataMap = try {
+                    repository.getClientsAndSessions()
+                } catch (e: Exception) {
+                    emptyMap()
+                }
 
-            val now = LocalDateTime.now()
-            val todayDow = now.dayOfWeek.value
+                val sessionOwnerMap = mutableMapOf<String, Client>()
+                val todaysSessions = mutableListOf<Session>()
 
-            dataMap.forEach { (client, sessions) ->
-                sessions.forEach { session ->
-                    if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
-                        todaysSessions.add(session)
-                        sessionOwnerMap[session.id] = client
+                val now = LocalDateTime.now()
+                val todayDow = now.dayOfWeek.value
+
+                dataMap.forEach { (client, sessions) ->
+                    sessions.forEach { session ->
+                        // Filter for today
+                        if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
+                            todaysSessions.add(session)
+                            sessionOwnerMap[session.id] = client
+                        }
                     }
                 }
-            }
 
-            todaysSessions.sortBy { it.scheduledHour ?: 24 }
+                todaysSessions.sortBy { it.scheduledHour ?: 24 }
 
-            val isSchedulingDay = (todayDow == schedulingDay)
+                val isSchedulingDay = (todayDow == schedulingDay)
 
-            provideContent {
-                GlanceTheme {
-                    WidgetContent(
-                        context = context,
-                        sessions = todaysSessions,
-                        sessionOwnerMap = sessionOwnerMap,
-                        isSchedulingDay = isSchedulingDay
-                    )
+                provideContent {
+                    GlanceTheme {
+                        WidgetContent(
+                            context = context,
+                            sessions = todaysSessions,
+                            sessionOwnerMap = sessionOwnerMap,
+                            isSchedulingDay = isSchedulingDay
+                        )
+                    }
                 }
-            }
-        } catch (e: Exception) {
-            provideContent {
-                GlanceTheme {
-                    Box(
-                        modifier = GlanceModifier.fillMaxSize().background(Color.Black),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Refresh", style = TextStyle(color = ColorProvider(Color.White)))
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Show error state but keep it cleaner
+                provideContent {
+                    GlanceTheme {
+                        Box(
+                            modifier = GlanceModifier
+                                .fillMaxSize()
+                                .background(Color(0xFF121212))
+                                .clickable(actionStartActivity<MainActivity>()), // Click to open app on error
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Tap to open RaiForm",
+                                style = TextStyle(color = ColorProvider(Color.White))
+                            )
+                        }
                     }
                 }
             }
@@ -133,9 +153,26 @@ class RaiFormWidget : GlanceAppWidget() {
                 .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (sessions.isEmpty()) {
-                EmptyState(context, isSchedulingDay)
+            // Priority:
+            // 1. If it's Scheduling Day AND no sessions (or even with sessions? Logic says "Scheduling Time" overrides?)
+            //    The request says: "if it's the scheduling day, it should say 'Scheduling Time'".
+            //    Assuming this takes precedence over the schedule list if it's the *main* task of the day.
+            //    But usually, you still want to see your sessions.
+            //    Let's make it show "Scheduling Time" ONLY if the list is empty OR explicitly required.
+            //    Re-reading: "if it's the scheduling day, it should say 'Scheduling Time' and launch directly into the scheduler"
+            //    This implies an empty state or a special state.
+            //    Let's perform check:
+
+            if (isSchedulingDay && sessions.isEmpty()) {
+                EmptyState(context, true)
+            } else if (sessions.isEmpty()) {
+                EmptyState(context, false) // Day Off
             } else {
+                // We have sessions.
+                // If isSchedulingDay is true, maybe we should show a banner?
+                // For now, let's stick to showing sessions if they exist, as clients come first.
+                // If the user wants to schedule, they can open the app.
+
                 if (isSmall) {
                     val nextSession = findNextSession(sessions) ?: sessions.first()
                     val client = sessionOwnerMap[nextSession.id]

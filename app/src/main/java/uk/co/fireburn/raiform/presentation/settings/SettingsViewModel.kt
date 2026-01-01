@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.repository.SettingsRepository
@@ -32,9 +33,20 @@ class SettingsViewModel @Inject constructor(
         SettingsState(day, hour, minute)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsState())
 
+    init {
+        // Ensure alarm is set on app launch/viewmodel creation
+        viewModelScope.launch {
+            val day = settingsRepository.schedulingDay.first()
+            val hour = settingsRepository.schedulingHour.first()
+            val minute = settingsRepository.schedulingMinute.first()
+            alarmScheduler.schedule(day, hour, minute)
+        }
+    }
+
     fun updateSchedulingDay(day: Int) {
         viewModelScope.launch {
             settingsRepository.setSchedulingDay(day)
+            // State flow updates asynchronously, so use the new 'day' directly
             rescheduleAlarm(day, state.value.schedulingHour, state.value.schedulingMinute)
         }
     }
