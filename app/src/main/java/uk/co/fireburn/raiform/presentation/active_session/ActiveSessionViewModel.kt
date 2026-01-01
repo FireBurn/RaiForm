@@ -73,27 +73,23 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
-    // --- NEW FUNCTION TO FIX YOUR ERROR ---
     fun reorderExercises(newOrder: List<Exercise>) {
         val currentSession = _uiState.value.session ?: return
-
-        // Update local state immediately for smooth UI
         val updatedSession = currentSession.copy(exercises = newOrder)
         _uiState.update { it.copy(session = updatedSession) }
-
-        // Save new order to database
         saveSession(updatedSession)
     }
-    // --------------------------------------
 
-    fun addExercise(name: String) {
+    // CHANGED: Accepts full details for the new exercise dialog flow
+    fun addExercise(name: String, weight: Double, isBodyweight: Boolean, sets: Int, reps: Int) {
         val currentSession = _uiState.value.session ?: return
 
         val newExercise = Exercise(
             name = name.toTitleCase(),
-            weight = 0.0,
-            sets = 3,
-            reps = 10
+            weight = weight,
+            isBodyweight = isBodyweight,
+            sets = sets,
+            reps = reps
         )
 
         val updatedList = currentSession.exercises + newExercise
@@ -103,10 +99,12 @@ class ActiveSessionViewModel @Inject constructor(
         saveSession(updatedSession)
     }
 
+    // CHANGED: Added isBodyweight parameter
     fun updateExerciseValues(
         exerciseId: String,
         name: String,
         newWeight: Double,
+        isBodyweight: Boolean,
         newSets: Int,
         newReps: Int
     ) {
@@ -117,6 +115,7 @@ class ActiveSessionViewModel @Inject constructor(
                 exercise.copy(
                     name = name.toTitleCase(),
                     weight = newWeight,
+                    isBodyweight = isBodyweight,
                     sets = newSets,
                     reps = newReps
                 )

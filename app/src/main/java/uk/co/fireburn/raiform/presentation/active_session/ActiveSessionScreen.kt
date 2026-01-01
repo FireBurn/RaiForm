@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
@@ -32,12 +33,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,6 +67,7 @@ import org.burnoutcrew.reorderable.detectReorderAfterLongPress
 import org.burnoutcrew.reorderable.rememberReorderableLazyListState
 import org.burnoutcrew.reorderable.reorderable
 import uk.co.fireburn.raiform.domain.model.Exercise
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,25 +78,14 @@ fun ActiveSessionScreen(
     val state by viewModel.uiState.collectAsState()
     val session = state.session
 
-    // State for the Edit Dialog
-    var exerciseToEdit by remember { mutableStateOf<Exercise?>(null) }
+    var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
+    var isCreatingNew by remember { mutableStateOf(false) }
 
-    // State for Add Exercise Dialog
-    var showAddExerciseDialog by remember { mutableStateOf(false) }
-    var newExerciseName by remember { mutableStateOf("") }
-
-    // Reorder State
     val reorderState = rememberReorderableLazyListState(
         onMove = { from, to ->
-            // CRITICAL FIX: Access state directly from ViewModel to ensure lambda uses fresh data
-            // Do NOT use the local 'session' variable here as it might be stale inside the remember block
             val currentSession = viewModel.uiState.value.session
-
             if (currentSession != null) {
                 val list = currentSession.exercises.toMutableList()
-
-                // Ensure indices are valid (Reorderable might return indices including headers/footers)
-                // Since 'items' is the first component, indices usually match 0-based list
                 if (from.index in list.indices && to.index in list.indices) {
                     val item = list.removeAt(from.index)
                     list.add(to.index, item)
@@ -137,10 +131,9 @@ fun ActiveSessionScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(16.dp)
-                    .reorderable(reorderState), // Enable reordering logic
+                    .reorderable(reorderState),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Reorderable List of Exercises
                 items(session.exercises, key = { it.id }) { exercise ->
                     ReorderableItem(reorderState, key = exercise.id) { isDragging ->
                         val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
@@ -149,7 +142,10 @@ fun ActiveSessionScreen(
                             ActiveExerciseCard(
                                 exercise = exercise,
                                 onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                                onEdit = { exerciseToEdit = exercise },
+                                onEdit = {
+                                    isCreatingNew = false
+                                    exerciseInDialog = exercise
+                                },
                                 onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
                                 dragHandle = {
                                     Icon(
@@ -164,10 +160,13 @@ fun ActiveSessionScreen(
                     }
                 }
 
-                // 2. Add Exercise Button at bottom (Not reorderable)
                 item {
                     Button(
-                        onClick = { showAddExerciseDialog = true },
+                        onClick = {
+                            isCreatingNew = true
+                            exerciseInDialog =
+                                Exercise(name = "", sets = 3, reps = 10, weight = 0.0)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -179,57 +178,37 @@ fun ActiveSessionScreen(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("ADD EXERCISE", fontWeight = FontWeight.Bold)
+                        Text("NEW EXERCISE", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // --- Dialogs ---
-
-        // 1. Add Exercise Dialog
-        if (showAddExerciseDialog) {
-            AlertDialog(
-                onDismissRequest = { showAddExerciseDialog = false },
-                title = { Text("Add Exercise") },
-                text = {
-                    OutlinedTextField(
-                        value = newExerciseName,
-                        onValueChange = { newExerciseName = it },
-                        label = { Text("Exercise Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        if (newExerciseName.isNotBlank()) {
-                            viewModel.addExercise(newExerciseName)
-                            newExerciseName = ""
-                            showAddExerciseDialog = false
-                        }
-                    }) {
-                        Text("ADD")
+        if (exerciseInDialog != null) {
+            ExerciseDialog(
+                exercise = exerciseInDialog!!,
+                isNew = isCreatingNew,
+                onDismiss = { exerciseInDialog = null },
+                onConfirm = { name, weight, isBodyweight, sets, reps ->
+                    if (isCreatingNew) {
+                        viewModel.addExercise(name, weight, isBodyweight, sets, reps)
+                    } else {
+                        viewModel.updateExerciseValues(
+                            exerciseInDialog!!.id,
+                            name,
+                            weight,
+                            isBodyweight,
+                            sets,
+                            reps
+                        )
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showAddExerciseDialog = false }) { Text("CANCEL") }
-                }
-            )
-        }
-
-        // 2. Edit / Delete Dialog
-        if (exerciseToEdit != null) {
-            EditExerciseDialog(
-                exercise = exerciseToEdit!!,
-                onDismiss = { exerciseToEdit = null },
-                onConfirm = { name, weight, sets, reps ->
-                    viewModel.updateExerciseValues(exerciseToEdit!!.id, name, weight, sets, reps)
-                    exerciseToEdit = null
+                    exerciseInDialog = null
                 },
                 onDelete = {
-                    viewModel.deleteExercise(exerciseToEdit!!.id)
-                    exerciseToEdit = null
+                    if (!isCreatingNew) {
+                        viewModel.deleteExercise(exerciseInDialog!!.id)
+                    }
+                    exerciseInDialog = null
                 }
             )
         }
@@ -260,12 +239,8 @@ fun ActiveExerciseCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. Drag Handle (Far Left)
             dragHandle()
-
             Spacer(modifier = Modifier.width(12.dp))
-
-            // 2. Checkbox
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (exercise.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -274,10 +249,7 @@ fun ActiveExerciseCard(
                     modifier = Modifier.size(32.dp)
                 )
             }
-
             Spacer(modifier = Modifier.width(8.dp))
-
-            // 3. Text Info (Center - Clickable)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -292,10 +264,16 @@ fun ActiveExerciseCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    DataBadge(
-                        text = if (exercise.isBodyweight) "BW" else "${exercise.weight}kg",
-                        isActive = !exercise.isDone
-                    )
+                    val weightText = if (exercise.isBodyweight) {
+                        when {
+                            exercise.weight > 0 -> "BW + ${exercise.weight}kg"
+                            exercise.weight < 0 -> "BW - ${abs(exercise.weight)}kg"
+                            else -> "Body Weight"
+                        }
+                    } else {
+                        "${exercise.weight}kg"
+                    }
+                    DataBadge(text = weightText, isActive = !exercise.isDone)
                     Spacer(modifier = Modifier.width(8.dp))
                     DataBadge(
                         text = "${exercise.sets} x ${exercise.reps}",
@@ -303,11 +281,8 @@ fun ActiveExerciseCard(
                     )
                 }
             }
-
-            // 4. Maintain Weight Toggle (Far Right - Same height as checkbox)
             IconButton(onClick = onToggleMaintain) {
                 if (exercise.maintainWeight) {
-                    // Currently Maintaining -> Pause Symbol (Red)
                     Icon(
                         imageVector = Icons.Default.Pause,
                         contentDescription = "Maintain Weight",
@@ -315,7 +290,6 @@ fun ActiveExerciseCard(
                         modifier = Modifier.size(32.dp)
                     )
                 } else {
-                    // Currently Progressing -> Up Arrow (Green)
                     Icon(
                         imageVector = Icons.Default.ArrowUpward,
                         contentDescription = "Increase Weight",
@@ -328,32 +302,34 @@ fun ActiveExerciseCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditExerciseDialog(
+fun ExerciseDialog(
     exercise: Exercise,
+    isNew: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, Int, Int) -> Unit,
+    onConfirm: (String, Double, Boolean, Int, Int) -> Unit,
     onDelete: () -> Unit
 ) {
     var nameText by remember { mutableStateOf(exercise.name) }
-    var weightText by remember { mutableStateOf(if (exercise.isBodyweight) "0" else exercise.weight.toString()) }
+    // Store absolute weight and its modifier separately for clarity
+    var weightText by remember { mutableStateOf(abs(exercise.weight).toString()) }
+    var weightModifier by remember { mutableStateOf(if (exercise.weight >= 0) 1 else -1) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
-
+    var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Remove Exercise?") },
-            text = { Text("Are you sure you want to remove '${exercise.name}' from this workout?") },
+            text = { Text("Are you sure you want to remove '${exercise.name}'?") },
             confirmButton = {
                 Button(
                     onClick = { onDelete() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("REMOVE")
-                }
+                ) { Text("REMOVE") }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("CANCEL") }
@@ -362,25 +338,56 @@ fun EditExerciseDialog(
     } else {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Edit Details") },
+            title = { Text(if (isNew) "New Exercise" else "Edit Exercise") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     OutlinedTextField(
-                        value = nameText,
-                        onValueChange = { nameText = it },
-                        label = { Text("Exercise Name") },
+                        value = nameText, onValueChange = { nameText = it },
+                        label = { Text("Exercise Name") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    if (!exercise.isBodyweight) {
-                        OutlinedTextField(
-                            value = weightText,
-                            onValueChange = { weightText = it },
-                            label = { Text("Weight (kg)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Body Weight Exercise?")
+                        Switch(checked = isBodyweight, onCheckedChange = { isBodyweight = it })
                     }
-
+                    if (isBodyweight) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = weightModifier == 1,
+                                onClick = { weightModifier = 1 },
+                                label = { Text("Weighted (+)") },
+                                leadingIcon = if (weightModifier == 1) {
+                                    { Icon(Icons.Default.Check, null) }
+                                } else null
+                            )
+                            FilterChip(
+                                selected = weightModifier == -1,
+                                onClick = { weightModifier = -1 },
+                                label = { Text("Assisted (-)") },
+                                leadingIcon = if (weightModifier == -1) {
+                                    { Icon(Icons.Default.Check, null) }
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = weightText, onValueChange = { weightText = it },
+                        label = {
+                            Text(if (isBodyweight) "Modifier Weight (kg)" else "Weight (kg)")
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = setsText,
@@ -402,26 +409,27 @@ fun EditExerciseDialog(
             confirmButton = {
                 Button(onClick = {
                     val w = weightText.toDoubleOrNull() ?: 0.0
+                    // Apply sign only if it's a bodyweight exercise
+                    val finalWeight = if (isBodyweight) w * weightModifier else w
                     val s = setsText.toIntOrNull() ?: 0
                     val r = repsText.toIntOrNull() ?: 0
                     if (nameText.isNotBlank()) {
-                        onConfirm(nameText, w, s, r)
+                        onConfirm(nameText, finalWeight, isBodyweight, s, r)
                     }
-                }) {
-                    Text("SAVE")
-                }
+                }) { Text("SAVE") }
             },
             dismissButton = {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error
-                        )
+                    if (!isNew) {
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(
+                                Icons.Default.Delete, "Delete",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                     TextButton(onClick = onDismiss) { Text("CANCEL") }
                 }
