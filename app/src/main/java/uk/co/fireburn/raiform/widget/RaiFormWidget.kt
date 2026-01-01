@@ -1,6 +1,5 @@
 package uk.co.fireburn.raiform.widget
 
-import android.content.ComponentName
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -63,7 +62,6 @@ class RaiFormWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
-        // Basic Error Handling to avoid spinning
         try {
             val entryPoint = EntryPointAccessors.fromApplication(
                 appContext,
@@ -72,7 +70,6 @@ class RaiFormWidget : GlanceAppWidget() {
             val repository = entryPoint.clientRepository()
             val settingsRepo = entryPoint.settingsRepository()
 
-            // Efficient One-Shot Fetch
             val dataMap = repository.getClientsAndSessions()
             val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
 
@@ -106,7 +103,6 @@ class RaiFormWidget : GlanceAppWidget() {
                 }
             }
         } catch (e: Exception) {
-            // Fallback UI in case of error
             provideContent {
                 GlanceTheme {
                     Box(
@@ -148,12 +144,8 @@ class RaiFormWidget : GlanceAppWidget() {
                         modifier = GlanceModifier
                             .fillMaxSize()
                             .clickable(
-                                actionStartActivity(
-                                    componentName = ComponentName(
-                                        context,
-                                        MainActivity::class.java
-                                    ),
-                                    parameters = actionParametersOf(
+                                actionStartActivity<MainActivity>(
+                                    actionParametersOf(
                                         keyTarget to "session",
                                         keyClient to (client?.id ?: ""),
                                         keySession to nextSession.id
@@ -203,12 +195,8 @@ class RaiFormWidget : GlanceAppWidget() {
                                     .background(Color(0xFF1E1E1E))
                                     .padding(8.dp)
                                     .clickable(
-                                        actionStartActivity(
-                                            componentName = ComponentName(
-                                                context,
-                                                MainActivity::class.java
-                                            ),
-                                            parameters = actionParametersOf(
+                                        actionStartActivity<MainActivity>(
+                                            actionParametersOf(
                                                 keyTarget to "session",
                                                 keyClient to (client?.id ?: ""),
                                                 keySession to session.id
@@ -263,9 +251,8 @@ class RaiFormWidget : GlanceAppWidget() {
             modifier = GlanceModifier
                 .fillMaxSize()
                 .clickable(
-                    actionStartActivity(
-                        componentName = ComponentName(context, MainActivity::class.java),
-                        parameters = actionParametersOf(keyTarget to target)
+                    actionStartActivity<MainActivity>(
+                        actionParametersOf(keyTarget to target)
                     )
                 ),
             verticalAlignment = Alignment.CenterVertically,

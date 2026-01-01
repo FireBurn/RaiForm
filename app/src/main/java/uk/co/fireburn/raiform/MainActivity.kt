@@ -29,9 +29,7 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        // Permission handling if needed
-    }
+    ) { _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,6 +92,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("settings") {
                             uk.co.fireburn.raiform.presentation.settings.SettingsScreen(
+                                navController
+                            )
+                        }
+                        // NEW ROUTE
+                        composable("client_stats/{clientId}") {
+                            uk.co.fireburn.raiform.presentation.client_stats.ClientStatsScreen(
                                 navController
                             )
                         }

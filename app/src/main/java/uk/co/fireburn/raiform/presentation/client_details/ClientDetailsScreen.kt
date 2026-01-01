@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -40,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -68,6 +70,9 @@ import uk.co.fireburn.raiform.presentation.components.DartboardClock
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
+
+// Enum defined at top level to be accessible
+enum class SessionAction { Rename, Delete, Schedule, ToggleSkip }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,8 +118,21 @@ fun ClientDetailsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { navController.navigate("client_stats/${state.client?.id}") },
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Icon(Icons.Default.TrendingUp, contentDescription = "Stats")
+                }
+
+                FloatingActionButton(onClick = { showAddDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add")
+                }
             }
         }
     ) { paddingValues ->
@@ -235,8 +253,6 @@ fun ClientDetailsScreen(
     }
 }
 
-enum class SessionAction { Rename, Delete, Schedule, ToggleSkip }
-
 @Composable
 fun SessionCard(
     session: Session,
@@ -249,7 +265,6 @@ fun SessionCard(
     val scheduleText = if (session.isSkippedThisWeek) {
         "Cancelled for this week"
     } else if (session.scheduledDay != null) {
-        // CHANGED: Use TextStyle.FULL to display full day name
         val day =
             DayOfWeek.of(session.scheduledDay).getDisplayName(TextStyle.FULL, Locale.getDefault())
         val hour = session.scheduledHour ?: 0
@@ -257,7 +272,6 @@ fun SessionCard(
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
 
-        // Hide minutes if 0
         val time = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
         "$day @ $time"
     } else {

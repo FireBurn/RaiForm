@@ -22,7 +22,6 @@ import javax.inject.Inject
 data class ClientDetailsUiState(
     val client: Client? = null,
     val sessions: List<Session> = emptyList(),
-    // Map of Day(1-7) -> List of Hours(0-23) that are busy globally
     val globalOccupiedSlots: Map<Int, List<Int>> = emptyMap(),
     val isLoading: Boolean = true,
     val error: String? = null
@@ -45,7 +44,6 @@ class ClientDetailsViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            // 1. Get Client
             val client = repository.getClientById(clientId)
             if (client == null) {
                 _uiState.update { it.copy(isLoading = false, error = "Client not found") }
@@ -53,7 +51,6 @@ class ClientDetailsViewModel @Inject constructor(
             }
             _uiState.update { it.copy(client = client) }
 
-            // 2. Get Sessions
             repository.getSessionsForClient(clientId).collect { sessions ->
                 val sortedSessions = sessions.sortedWith(
                     compareBy(
@@ -74,15 +71,8 @@ class ClientDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             val allSessions = repository.getAllSessionsFromAllClients()
             val map = mutableMapOf<Int, MutableList<Int>>()
-
             allSessions.forEach { session ->
                 if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
-                    // Important: We include ALL sessions here.
-                    // If the user selects a session they are currently editing, we handle "ignoring self"
-                    // in the UI or let them see it as occupied (which implies they are moving it).
-                    // Ideally, we should filter out the *specific* session being edited, but we don't know
-                    // which one is being edited in this generic load function.
-                    // We will filter it in the Dialog or pass the ID to ignore.
                     val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
                     list.add(session.scheduledHour)
                 }
@@ -104,35 +94,41 @@ class ClientDetailsViewModel @Inject constructor(
         val lastResetMillis =
             lastResetDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-        var updatesNeeded = false
-        val updatedSessions = sessions.map { session ->
-            if (session.lastResetTimestamp < lastResetMillis) {
-                updatesNeeded = true
-                val resetExercises = session.exercises.map { it.copy(isDone = false) }
-                session.copy(
-                    exercises = resetExercises,
-                    isSkippedThisWeek = false,
-                    tempRescheduleTimestamp = null,
-                    lastResetTimestamp = System.currentTimeMillis()
-                )
-            } else {
-                session
+        // Check if reset is needed
+        val needsReset = sessions.any { it.lastResetTimestamp < lastResetMillis }
+
+        if (needsReset) {
+            // 1. LOG HISTORY: Save the *current* state (which is the "completed" state of previous week)
+            // We use System.currentTimeMillis() as the log date
+            repository.logSessionHistory(client.id, sessions, System.currentTimeMillis())
+
+            // 2. RESET SESSIONS
+            val updatedSessions = sessions.map { session ->
+                if (session.lastResetTimestamp < lastResetMillis) {
+                    val resetExercises = session.exercises.map { it.copy(isDone = false) }
+                    session.copy(
+                        exercises = resetExercises,
+                        isSkippedThisWeek = false,
+                        tempRescheduleTimestamp = null,
+                        lastResetTimestamp = System.currentTimeMillis() // Mark as reset
+                    )
+                } else {
+                    session
+                }
             }
+
+            repository.updateClientSessionsOrder(client.id, updatedSessions)
+            return updatedSessions
         }
 
-        if (updatesNeeded) {
-            repository.updateClientSessionsOrder(client.id, updatedSessions)
-        }
-        return updatedSessions
+        return sessions
     }
 
-    // --- Scheduling & Reordering ---
-
+    // ... (Scheduling/CRUD methods remain the same) ...
     fun onReorderSessions(newOrder: List<Session>) {
         val oldOrder = _uiState.value.sessions
         val schedules =
             oldOrder.map { Triple(it.scheduledDay, it.scheduledHour, it.scheduledMinute) }
-
         val reorderedWithSwappedSchedules = newOrder.mapIndexed { index, session ->
             if (index < schedules.size) {
                 val (day, hour, min) = schedules[index]
@@ -141,11 +137,9 @@ class ClientDetailsViewModel @Inject constructor(
                 session
             }
         }
-
         _uiState.update { it.copy(sessions = reorderedWithSwappedSchedules) }
         viewModelScope.launch {
             repository.updateClientSessionsOrder(clientId, reorderedWithSwappedSchedules)
-            // Trigger global refresh to update occupied slots (in case we swapped times)
             loadGlobalSchedule()
         }
     }
@@ -154,7 +148,6 @@ class ClientDetailsViewModel @Inject constructor(
         val updated =
             session.copy(scheduledDay = day, scheduledHour = hour, scheduledMinute = minute)
         updateSession(updated)
-        // Refresh occupied slots
         loadGlobalSchedule()
     }
 
@@ -164,26 +157,18 @@ class ClientDetailsViewModel @Inject constructor(
         loadGlobalSchedule()
     }
 
-    // --- Basic CRUD ---
-
     fun addSession(name: String) {
-        val newSession = Session(name = name.toTitleCase())
-        updateSession(newSession)
+        updateSession(Session(name = name.toTitleCase()))
     }
 
     fun renameSession(session: Session, newName: String) {
-        val updated = session.copy(name = newName.toTitleCase())
-        updateSession(updated)
+        updateSession(session.copy(name = newName.toTitleCase()))
     }
 
     fun deleteSession(session: Session) {
         viewModelScope.launch {
-            try {
-                repository.deleteSession(clientId, session.id)
-                loadGlobalSchedule()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to delete: ${e.message}") }
-            }
+            repository.deleteSession(clientId, session.id)
+            loadGlobalSchedule()
         }
     }
 

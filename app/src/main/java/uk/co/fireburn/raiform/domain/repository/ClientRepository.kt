@@ -18,7 +18,17 @@ interface ClientRepository {
     suspend fun updateSession(clientId: String, session: Session)
     suspend fun deleteSession(clientId: String, sessionId: String)
     suspend fun getAllSessionsFromAllClients(): List<Session>
-
-    // NEW: Efficient one-shot fetch for Widget
     suspend fun getClientsAndSessions(): Map<Client, List<Session>>
+
+    // --- NEW: History & Stats ---
+    /**
+     * Saves a snapshot of sessions to the client's history sub-collection.
+     * Usually called before a weekly reset.
+     */
+    suspend fun logSessionHistory(clientId: String, sessions: List<Session>, date: Long)
+
+    /**
+     * Retrieves all historical session snapshots for stats.
+     */
+    suspend fun getClientHistory(clientId: String): List<Session>
 }
