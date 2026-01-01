@@ -141,7 +141,12 @@ fun DashboardScreen(
                 .padding(horizontal = 16.dp)
         ) {
             // 1. Welcome / Status Card
-            StatusCard(activeCount = state.clients.size)
+            // CHANGED: Now accepts optional strings for the next session info
+            StatusCard(
+                activeCount = state.clients.size,
+                nextClientName = state.nextGlobalSessionClient,
+                nextSessionTime = state.nextGlobalSessionTime
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -170,8 +175,12 @@ fun DashboardScreen(
                     contentPadding = PaddingValues(bottom = 120.dp) // Extra padding for the stack of FABs
                 ) {
                     items(state.clients) { client ->
+                        // CHANGED: Retrieve calculated status text
+                        val statusText = state.clientScheduleStatus[client.id] ?: "Active"
+
                         ClientCard(
                             client = client,
+                            statusText = statusText,
                             onClick = {
                                 navController.navigate("client_details/${client.id}")
                             },
@@ -276,7 +285,11 @@ fun DashboardScreen(
 }
 
 @Composable
-fun StatusCard(activeCount: Int) {
+fun StatusCard(
+    activeCount: Int,
+    nextClientName: String?,
+    nextSessionTime: String?
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -297,12 +310,28 @@ fun StatusCard(activeCount: Int) {
                     color = Color.Black.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "$activeCount Clients Active",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.Black,
-                    fontWeight = FontWeight.ExtraBold
-                )
+                // CHANGED: Display logic for Next Session vs Active Count
+                if (nextClientName != null && nextSessionTime != null) {
+                    Text(
+                        text = "$nextClientName",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.Black,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = nextSessionTime,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.Black.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = "$activeCount Clients Active",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.Black,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             }
             Icon(
                 imageVector = Icons.Default.FitnessCenter,
@@ -320,6 +349,7 @@ fun StatusCard(activeCount: Int) {
 @Composable
 fun ClientCard(
     client: Client,
+    statusText: String, // CHANGED: New parameter
     onClick: () -> Unit,
     onArchive: () -> Unit,
     onRename: () -> Unit
@@ -366,10 +396,11 @@ fun ClientCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                // CHANGED: Show dynamic status text
                 Text(
-                    text = "Status: ${client.status.name}",
+                    text = statusText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (client.status.name == "ACTIVE") MaterialTheme.colorScheme.primary else Color.Gray
+                    color = if (statusText.contains("No sessions")) Color.Gray else MaterialTheme.colorScheme.primary
                 )
             }
 

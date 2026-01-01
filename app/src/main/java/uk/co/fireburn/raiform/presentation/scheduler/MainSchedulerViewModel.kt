@@ -76,12 +76,24 @@ class MainSchedulerViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(selectedClient = client, selectedSession = null) }
             repository.getSessionsForClient(client.id).collect { sessions ->
-                _state.update { it.copy(clientSessions = sessions) }
+                // CHANGED: Sort sessions to ensure logical order in the Scheduler UI
+                // 1. Scheduled (Day -> Hour -> Minute)
+                // 2. Unscheduled (by Name)
+                val sortedSessions = sessions.sortedWith(
+                    compareBy(
+                        { it.scheduledDay ?: 8 },     // Days 1-7 first, null (8) last
+                        { it.scheduledHour ?: 25 },   // Hours 0-23 first, null (25) last
+                        { it.scheduledMinute ?: 61 }, // Minutes 0-59 first
+                        { it.name }
+                    )
+                )
+
+                _state.update { it.copy(clientSessions = sortedSessions) }
 
                 // Auto-select first unscheduled (or just first) session?
                 // For now, let user pick, or auto-select first one.
-                if (sessions.isNotEmpty()) {
-                    selectSession(sessions.first())
+                if (sortedSessions.isNotEmpty()) {
+                    selectSession(sortedSessions.first())
                 }
             }
         }
