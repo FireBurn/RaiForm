@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
     <application
         android:name=".RaiFormApp"
         android:allowBackup="true"
@@ -35,6 +39,9 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/raiform_widget_info" />
         </receiver>
+
+        <!-- ALARM RECEIVER -->
+        <receiver android:name=".receiver.SchedulingAlarmReceiver" />
 
     </application>
 </manifest>

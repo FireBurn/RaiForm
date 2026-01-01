@@ -1,7 +1,7 @@
 package uk.co.fireburn.raiform.widget
 
+import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -10,10 +10,12 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.LocalSize
+import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
@@ -41,16 +43,22 @@ import uk.co.fireburn.raiform.MainActivity
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.ClientRepository
+import uk.co.fireburn.raiform.domain.repository.SettingsRepository
 import java.time.LocalDateTime
 
 class RaiFormWidget : GlanceAppWidget() {
 
     override val sizeMode = SizeMode.Exact
 
+    private val keyTarget = ActionParameters.Key<String>("navigation_target")
+    private val keyClient = ActionParameters.Key<String>("client_id")
+    private val keySession = ActionParameters.Key<String>("session_id")
+
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface RepositoryEntryPoint {
         fun clientRepository(): ClientRepository
+        fun settingsRepository(): SettingsRepository
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -60,8 +68,11 @@ class RaiFormWidget : GlanceAppWidget() {
             RepositoryEntryPoint::class.java
         )
         val repository = entryPoint.clientRepository()
+        val settingsRepo = entryPoint.settingsRepository()
 
         val clients = repository.getClients().firstOrNull() ?: emptyList()
+        val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
+
         val sessionOwnerMap = mutableMapOf<String, Client>()
         val todaysSessions = mutableListOf<Session>()
 
@@ -71,7 +82,6 @@ class RaiFormWidget : GlanceAppWidget() {
         for (client in clients) {
             val clientSessions =
                 repository.getSessionsForClient(client.id).firstOrNull() ?: emptyList()
-
             clientSessions.forEach { session ->
                 if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
                     todaysSessions.add(session)
@@ -82,7 +92,7 @@ class RaiFormWidget : GlanceAppWidget() {
 
         todaysSessions.sortBy { it.scheduledHour ?: 24 }
 
-        val isSchedulingDay = (todayDow == 7)
+        val isSchedulingDay = (todayDow == schedulingDay)
 
         provideContent {
             GlanceTheme {
@@ -125,7 +135,15 @@ class RaiFormWidget : GlanceAppWidget() {
                             .fillMaxSize()
                             .clickable(
                                 actionStartActivity(
-                                    getIntent(context, "session", client?.id, nextSession.id)
+                                    componentName = ComponentName(
+                                        context,
+                                        MainActivity::class.java
+                                    ),
+                                    parameters = actionParametersOf(
+                                        keyTarget to "session",
+                                        keyClient to (client?.id ?: ""),
+                                        keySession to nextSession.id
+                                    )
                                 )
                             ),
                         verticalAlignment = Alignment.CenterVertically,
@@ -172,7 +190,15 @@ class RaiFormWidget : GlanceAppWidget() {
                                     .padding(8.dp)
                                     .clickable(
                                         actionStartActivity(
-                                            getIntent(context, "session", client?.id, session.id)
+                                            componentName = ComponentName(
+                                                context,
+                                                MainActivity::class.java
+                                            ),
+                                            parameters = actionParametersOf(
+                                                keyTarget to "session",
+                                                keyClient to (client?.id ?: ""),
+                                                keySession to session.id
+                                            )
                                         )
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
@@ -224,7 +250,8 @@ class RaiFormWidget : GlanceAppWidget() {
                 .fillMaxSize()
                 .clickable(
                     actionStartActivity(
-                        getIntent(context, target)
+                        componentName = ComponentName(context, MainActivity::class.java),
+                        parameters = actionParametersOf(keyTarget to target)
                     )
                 ),
             verticalAlignment = Alignment.CenterVertically,
@@ -261,22 +288,6 @@ class RaiFormWidget : GlanceAppWidget() {
     private fun formatTime(hour: Int, minute: Int): String {
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
-        // CHANGED: Hide minutes if 0
         return if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
-    }
-
-    private fun getIntent(
-        context: Context,
-        type: String,
-        clientId: String? = null,
-        sessionId: String? = null
-    ): Intent {
-        return Intent(context, MainActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("navigation_target", type) // 'session', 'scheduler', 'dashboard'
-            if (clientId != null) putExtra("client_id", clientId)
-            if (sessionId != null) putExtra("session_id", sessionId)
-        }
     }
 }
