@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.presentation.client_details
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,20 +55,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import org.burnoutcrew.reorderable.rememberReorderableLazyListState
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.presentation.components.DartboardClock
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
 
-// Enum defined at top level to ensure visibility
+// Enum defined at top level
 enum class SessionAction { Rename, Delete, Schedule, ToggleSkip }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,16 +86,19 @@ fun ClientDetailsScreen(
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
-    rememberReorderableLazyListState(
-        onMove = { from, to ->
-            val list = viewModel.uiState.value.sessions.toMutableList()
-            if (from.index in list.indices && to.index in list.indices) {
-                val item = list.removeAt(from.index)
-                list.add(to.index, item)
-                viewModel.onReorderSessions(list)
-            }
+    // Reorderable State
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val list = state.sessions.toMutableList()
+        // Ensure indices are within bounds and valid
+        val fromIndex = from.index
+        val toIndex = to.index
+        if (fromIndex in list.indices && toIndex in list.indices) {
+            val item = list.removeAt(fromIndex)
+            list.add(toIndex, item)
+            viewModel.onReorderSessions(list)
         }
-    )
+    }
 
     Scaffold(
         topBar = {
@@ -122,7 +129,6 @@ fun ClientDetailsScreen(
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 ) {
-                    // CHANGED: Use AutoMirrored icon
                     Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = "Stats")
                 }
 
@@ -139,6 +145,7 @@ fun ClientDetailsScreen(
             ) { CircularProgressIndicator() }
         } else {
             LazyColumn(
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -146,31 +153,41 @@ fun ClientDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.sessions, key = { it.id }) { session ->
-                    SessionCard(
-                        session = session,
-                        onClick = { navController.navigate("active_session/${state.client?.id}/${session.id}") },
-                        onAction = { action ->
-                            when (action) {
-                                SessionAction.Rename -> sessionToRename = session
-                                SessionAction.Delete -> viewModel.deleteSession(session)
-                                SessionAction.Schedule -> sessionToSchedule = session
-                                SessionAction.ToggleSkip -> viewModel.toggleSkipSession(session)
-                            }
-                        },
-                        // Visual drag handle
-                        dragHandle = {
-                            Icon(
-                                Icons.Default.DragHandle,
-                                contentDescription = "Reorder",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ReorderableItem(reorderableState, key = session.id) { isDragging ->
+                        val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
+
+                        Box(modifier = Modifier.shadow(elevation.value)) {
+                            SessionCard(
+                                session = session,
+                                onClick = { navController.navigate("active_session/${state.client?.id}/${session.id}") },
+                                onAction = { action ->
+                                    when (action) {
+                                        SessionAction.Rename -> sessionToRename = session
+                                        SessionAction.Delete -> viewModel.deleteSession(session)
+                                        SessionAction.Schedule -> sessionToSchedule = session
+                                        SessionAction.ToggleSkip -> viewModel.toggleSkipSession(
+                                            session
+                                        )
+                                    }
+                                },
+                                dragHandle = {
+                                    // Apply the draggableHandle modifier to this icon
+                                    Icon(
+                                        Icons.Default.DragHandle,
+                                        contentDescription = "Reorder",
+                                        modifier = Modifier.draggableHandle(), // This makes it the drag source
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                 }
                 item { Spacer(Modifier.height(80.dp)) }
             }
         }
 
+        // ... (Dialogs remain unchanged) ...
         if (sessionToSchedule != null) {
             DartboardScheduleDialog(
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
@@ -241,7 +258,7 @@ fun ClientDetailsScreen(
     }
 }
 
-// ... (Rest of file helpers remain unchanged) ...
+// ... (Helper Composables like SessionCard, DartboardScheduleDialog remain unchanged) ...
 @Composable
 fun SessionCard(
     session: Session,

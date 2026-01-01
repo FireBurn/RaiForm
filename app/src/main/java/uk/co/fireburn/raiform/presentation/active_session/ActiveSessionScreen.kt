@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.presentation.active_session
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Exercise
 import kotlin.math.abs
 
@@ -74,6 +79,19 @@ fun ActiveSessionScreen(
 
     var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
+
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val currentSession = viewModel.uiState.value.session
+        if (currentSession != null) {
+            val list = currentSession.exercises.toMutableList()
+            if (from.index in list.indices && to.index in list.indices) {
+                val item = list.removeAt(from.index)
+                list.add(to.index, item)
+                viewModel.reorderExercises(list)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -106,30 +124,38 @@ fun ActiveSessionScreen(
             }
         } else {
             LazyColumn(
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. List of Exercises
+                // 1. Reorderable List of Exercises
                 items(session.exercises, key = { it.id }) { exercise ->
-                    ActiveExerciseCard(
-                        exercise = exercise,
-                        onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                        onEdit = {
-                            isCreatingNew = false
-                            exerciseInDialog = exercise
-                        },
-                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
-                        dragHandle = {
-                            Icon(
-                                imageVector = Icons.Default.DragHandle,
-                                contentDescription = "Reorder",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ReorderableItem(reorderableState, key = exercise.id) { isDragging ->
+                        val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
+
+                        Box(modifier = Modifier.shadow(elevation.value)) {
+                            ActiveExerciseCard(
+                                exercise = exercise,
+                                onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                                onEdit = {
+                                    isCreatingNew = false
+                                    exerciseInDialog = exercise
+                                },
+                                onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
+                                dragHandle = {
+                                    Icon(
+                                        imageVector = Icons.Default.DragHandle,
+                                        contentDescription = "Reorder",
+                                        modifier = Modifier.draggableHandle(),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                 }
 
                 item {
@@ -187,7 +213,7 @@ fun ActiveSessionScreen(
     }
 }
 
-// ... (Rest of ActiveSessionScreen.kt helpers remain the same as previous) ...
+// ... (Rest of ActivityExerciseCard, ExerciseDialog, DataBadge remain unchanged) ...
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,

@@ -62,8 +62,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // REMOVED: Incompatible library
-    // implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+    // NEW: Modern Reorderable Library
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
     implementation("androidx.compose.material:material-icons-extended")
 
