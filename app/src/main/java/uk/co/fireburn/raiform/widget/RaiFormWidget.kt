@@ -63,45 +63,59 @@ class RaiFormWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
-        val entryPoint = EntryPointAccessors.fromApplication(
-            appContext,
-            RepositoryEntryPoint::class.java
-        )
-        val repository = entryPoint.clientRepository()
-        val settingsRepo = entryPoint.settingsRepository()
+        // Basic Error Handling to avoid spinning
+        try {
+            val entryPoint = EntryPointAccessors.fromApplication(
+                appContext,
+                RepositoryEntryPoint::class.java
+            )
+            val repository = entryPoint.clientRepository()
+            val settingsRepo = entryPoint.settingsRepository()
 
-        val clients = repository.getClients().firstOrNull() ?: emptyList()
-        val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
+            // Efficient One-Shot Fetch
+            val dataMap = repository.getClientsAndSessions()
+            val schedulingDay = settingsRepo.schedulingDay.firstOrNull() ?: 7
 
-        val sessionOwnerMap = mutableMapOf<String, Client>()
-        val todaysSessions = mutableListOf<Session>()
+            val sessionOwnerMap = mutableMapOf<String, Client>()
+            val todaysSessions = mutableListOf<Session>()
 
-        val now = LocalDateTime.now()
-        val todayDow = now.dayOfWeek.value
+            val now = LocalDateTime.now()
+            val todayDow = now.dayOfWeek.value
 
-        for (client in clients) {
-            val clientSessions =
-                repository.getSessionsForClient(client.id).firstOrNull() ?: emptyList()
-            clientSessions.forEach { session ->
-                if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
-                    todaysSessions.add(session)
-                    sessionOwnerMap[session.id] = client
+            dataMap.forEach { (client, sessions) ->
+                sessions.forEach { session ->
+                    if (session.scheduledDay == todayDow && !session.isSkippedThisWeek) {
+                        todaysSessions.add(session)
+                        sessionOwnerMap[session.id] = client
+                    }
                 }
             }
-        }
 
-        todaysSessions.sortBy { it.scheduledHour ?: 24 }
+            todaysSessions.sortBy { it.scheduledHour ?: 24 }
 
-        val isSchedulingDay = (todayDow == schedulingDay)
+            val isSchedulingDay = (todayDow == schedulingDay)
 
-        provideContent {
-            GlanceTheme {
-                WidgetContent(
-                    context = context,
-                    sessions = todaysSessions,
-                    sessionOwnerMap = sessionOwnerMap,
-                    isSchedulingDay = isSchedulingDay
-                )
+            provideContent {
+                GlanceTheme {
+                    WidgetContent(
+                        context = context,
+                        sessions = todaysSessions,
+                        sessionOwnerMap = sessionOwnerMap,
+                        isSchedulingDay = isSchedulingDay
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback UI in case of error
+            provideContent {
+                GlanceTheme {
+                    Box(
+                        modifier = GlanceModifier.fillMaxSize().background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Refresh", style = TextStyle(color = ColorProvider(Color.White)))
+                    }
+                }
             }
         }
     }
