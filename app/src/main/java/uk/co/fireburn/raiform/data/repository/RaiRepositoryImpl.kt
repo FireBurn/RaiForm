@@ -107,12 +107,12 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun saveSession(clientId: String, session: Session) {
-        sessionDao.insertSession(SessionEntity.fromDomain(session, clientId))
+    override suspend fun saveSession(session: Session) {
+        sessionDao.insertSession(SessionEntity.fromDomain(session))
 
         repositoryScope.launch {
             try {
-                firestore.collection("clients").document(clientId)
+                firestore.collection("clients").document(session.clientId)
                     .collection("sessions").document(session.id)
                     .set(session).await()
             } catch (e: Exception) {
@@ -121,14 +121,15 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun updateSessionOrder(clientId: String, sessions: List<Session>) {
-        val entities = sessions.map { SessionEntity.fromDomain(it, clientId) }
-        sessionDao.insertSessions(entities) // Replace strategy handles updates
+    override suspend fun updateSessionOrder(sessions: List<Session>) {
+        val entities = sessions.map { SessionEntity.fromDomain(it) }
+        sessionDao.insertSessions(entities)
 
         repositoryScope.launch {
             val batch = firestore.batch()
             sessions.forEach { session ->
-                val ref = firestore.collection("clients").document(clientId)
+                val ref = firestore.collection("clients")
+                    .document(session.clientId)
                     .collection("sessions").document(session.id)
                 batch.set(ref, session)
             }
@@ -167,6 +168,14 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
+    // New method to get ALL history logs (needed for ExportDataUseCase)
+    override fun getAllHistoryLogs(): Flow<List<HistoryLog>> {
+        return historyDao.getAllHistoryLogs().map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+
     override suspend fun logHistory(log: HistoryLog) {
         historyDao.insertLog(HistoryEntity.fromDomain(log))
 
@@ -204,8 +213,13 @@ class RaiRepositoryImpl @Inject constructor(
                         .collection("sessions")
                         .get().await()
 
-                    val sessions = sessionSnapshot.toObjects(Session::class.java)
-                    val sessionEntities = sessions.map { SessionEntity.fromDomain(it, client.id) }
+                    // Need to explicitly set clientId for each session when converting from Firestore object
+                    // because Firestore doesn't implicitly put the parent document ID into subcollection documents
+                    val sessions = sessionSnapshot.documents.map { doc ->
+                        doc.toObject(Session::class.java)!!.copy(clientId = client.id)
+                    }
+                    val sessionEntities =
+                        sessions.map { SessionEntity.fromDomain(it) }
 
                     if (sessionEntities.isNotEmpty()) {
                         sessionDao.insertSessions(sessionEntities)
@@ -219,7 +233,10 @@ class RaiRepositoryImpl @Inject constructor(
                         .limit(50) // Limit to recent history for speed
                         .get().await()
 
-                    val history = historySnapshot.toObjects(HistoryLog::class.java)
+                    // Need to explicitly set clientId for each history log
+                    val history = historySnapshot.documents.map { doc ->
+                        doc.toObject(HistoryLog::class.java)!!.copy(clientId = client.id)
+                    }
                     val historyEntities = history.map { HistoryEntity.fromDomain(it) }
 
                     if (historyEntities.isNotEmpty()) {

@@ -37,14 +37,17 @@ interface RaiRepository {
      */
     fun getAllSessions(): Flow<List<Session>>
 
-    suspend fun saveSession(clientId: String, session: Session)
+    suspend fun saveSession(session: Session)
 
-    suspend fun updateSessionOrder(clientId: String, sessions: List<Session>)
+    suspend fun updateSessionOrder(sessions: List<Session>)
 
     suspend fun deleteSession(sessionId: String)
 
     // --- History & Logging ---
     fun getHistoryForClient(clientId: String): Flow<List<HistoryLog>>
+
+    // Get all history logs (for export)
+    fun getAllHistoryLogs(): Flow<List<HistoryLog>>
 
     suspend fun logHistory(log: HistoryLog)
 

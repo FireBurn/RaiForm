@@ -3,6 +3,7 @@ package uk.co.fireburn.raiform.util
 import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 import java.util.Locale
+import java.util.UUID // Add this import
 
 object LegacyParser {
 
@@ -54,7 +55,9 @@ object LegacyParser {
                 // Save previous session if it has exercises
                 if (currentExercises.isNotEmpty()) {
                     sessions.add(
+                        // Assign a dummy clientId here, it will be replaced during save in ImportLegacyNoteUseCase
                         Session(
+                            clientId = UUID.randomUUID().toString(), // Dummy ID
                             name = currentSessionName,
                             exercises = currentExercises.toList()
                         )
@@ -74,7 +77,13 @@ object LegacyParser {
 
         // Add the final session
         if (currentExercises.isNotEmpty()) {
-            sessions.add(Session(name = currentSessionName, exercises = currentExercises.toList()))
+            sessions.add(
+                Session(
+                    clientId = UUID.randomUUID().toString(), // Dummy ID
+                    name = currentSessionName,
+                    exercises = currentExercises.toList()
+                )
+            )
         }
 
         return ParseResult(clientName, sessions)

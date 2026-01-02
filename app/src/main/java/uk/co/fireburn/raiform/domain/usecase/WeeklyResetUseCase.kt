@@ -83,7 +83,8 @@ class WeeklyResetUseCase @Inject constructor(
 
         // 4. Persist changes
         // We use updateSessionOrder as a batch update for the client's sessions
-        repository.updateSessionOrder(client.id, updatedSessions)
+        // Fixed: removed client.id argument as sessions now contain their own clientId
+        repository.updateSessionOrder(updatedSessions)
 
         return updatedSessions
     }

@@ -35,6 +35,7 @@ data class SessionEntity(
 ) {
     fun toDomain() = Session(
         id = id,
+        clientId = clientId, // Pass clientId here
         name = name,
         exercises = exercises,
         scheduledDay = scheduledDay,
@@ -46,18 +47,19 @@ data class SessionEntity(
     )
 
     companion object {
-        fun fromDomain(session: Session, clientId: String) = SessionEntity(
-            id = session.id,
-            clientId = clientId,
-            name = session.name,
-            exercises = session.exercises,
-            scheduledDay = session.scheduledDay,
-            scheduledHour = session.scheduledHour,
-            scheduledMinute = session.scheduledMinute,
-            lastResetTimestamp = session.lastResetTimestamp,
-            isSkippedThisWeek = session.isSkippedThisWeek,
-            tempRescheduleTimestamp = session.tempRescheduleTimestamp,
-            lastSyncTimestamp = System.currentTimeMillis()
-        )
+        fun fromDomain(session: Session) =
+            SessionEntity( // Removed clientId param, now comes from session
+                id = session.id,
+                clientId = session.clientId, // Get clientId from session
+                name = session.name,
+                exercises = session.exercises,
+                scheduledDay = session.scheduledDay,
+                scheduledHour = session.scheduledHour,
+                scheduledMinute = session.scheduledMinute,
+                lastResetTimestamp = session.lastResetTimestamp,
+                isSkippedThisWeek = session.isSkippedThisWeek,
+                tempRescheduleTimestamp = session.tempRescheduleTimestamp,
+                lastSyncTimestamp = System.currentTimeMillis()
+            )
     }
 }

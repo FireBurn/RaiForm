@@ -1,11 +1,13 @@
 package uk.co.fireburn.raiform.domain.model
 
+import kotlinx.serialization.Serializable
 import java.util.UUID
 
 /**
  * Domain representation of a Client.
  * Pure data class, independent of Database/Network frameworks.
  */
+@Serializable
 data class Client(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -16,6 +18,7 @@ data class Client(
     val weeklyResetDay: Int = 7
 )
 
+@Serializable
 enum class ClientStatus {
     ACTIVE,
     PAUSED,

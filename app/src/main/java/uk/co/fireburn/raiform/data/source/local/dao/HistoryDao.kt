@@ -13,6 +13,9 @@ interface HistoryDao {
     @Query("SELECT * FROM history_logs WHERE clientId = :clientId ORDER BY dateLogged DESC")
     fun getHistoryForClient(clientId: String): Flow<List<HistoryEntity>>
 
+    @Query("SELECT * FROM history_logs ORDER BY dateLogged DESC")
+    fun getAllHistoryLogs(): Flow<List<HistoryEntity>> // ADDED
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: HistoryEntity)
 

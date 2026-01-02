@@ -28,7 +28,7 @@ class ImportLegacyNoteUseCase @Inject constructor(
             // We iterate and save individually or via batch if repository supported it
             // The parser generates ephemeral IDs, but they are UUIDs so we can use them directly
             parseResult.sessions.forEach { session ->
-                repository.saveSession(newClient.id, session)
+                repository.saveSession(session.copy(clientId = newClient.id))
             }
 
             Result.success(newClient.id)

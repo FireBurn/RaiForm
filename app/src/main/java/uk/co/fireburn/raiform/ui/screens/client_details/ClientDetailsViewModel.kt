@@ -175,7 +175,7 @@ class ClientDetailsViewModel @Inject constructor(
                 }
             }
 
-            manageSessionUseCase.updateSessionOrder(clientId, reorderedWithSwappedSchedules)
+            repository.updateSessionOrder(reorderedWithSwappedSchedules)
         }
     }
 }
