@@ -10,5 +10,5 @@ plugins {
 
 // Clean task to remove the build directory
 tasks.register("clean", Delete::class) {
-    delete(rootProject.buildDir)
+    delete(rootProject.layout.buildDirectory)
 }

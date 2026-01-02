@@ -2,9 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required for AlarmScheduler to work precisely -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".RaiFormApp"
@@ -16,6 +20,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RaiForm"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
 
         <activity
@@ -28,7 +33,13 @@
             </intent-filter>
         </activity>
 
-        <!-- WIDGET RECEIVER -->
+        <!-- Receiver for the Weekly Planning Notification -->
+        <receiver
+            android:name=".receiver.SchedulingAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Receiver for the Home Screen Widget -->
         <receiver
             android:name=".widget.RaiFormWidgetReceiver"
             android:exported="true">
@@ -40,8 +51,18 @@
                 android:resource="@xml/raiform_widget_info" />
         </receiver>
 
-        <!-- ALARM RECEIVER -->
-        <receiver android:name=".receiver.SchedulingAlarmReceiver" />
+        <!-- WorkManager Configuration (Initialized automatically, but good to know) -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
+
 </manifest>
