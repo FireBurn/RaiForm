@@ -89,6 +89,23 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun deleteClient(clientId: String) {
+        // 1. Delete Local
+        // Room foreign keys are set to CASCADE, so sessions and history will be deleted automatically.
+        clientDao.deleteClient(clientId)
+
+        // 2. Delete Remote
+        repositoryScope.launch {
+            try {
+                firestore.collection("clients").document(clientId).delete()
+                // Note: Firestore does not automatically delete subcollections.
+                // We leave them as orphans or handle via Cloud Functions for simplicity here.
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     // --- Sessions ---
 
     override fun getSessionsForClient(clientId: String): Flow<List<Session>> {
@@ -138,19 +155,8 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteSession(sessionId: String) {
-        // We need clientId to delete from remote effectively, strictly speaking.
-        // For now, we assume we find it or the architecture passes it.
-        // In the interface, we only asked for sessionId.
-        // To fix this in a real app, deleteSession should take (clientId, sessionId).
-        // For now, we will delete local and try to delete remote if possible.
-
         sessionDao.deleteSession(sessionId)
 
-        // Note: Without clientId, finding the document path in Firestore subcollections is hard
-        // unless we use a CollectionGroup query to find the parent.
-        // For this artifact, we'll assume the caller updates the list via 'updateSessionOrder' mostly,
-        // or we accept that 'deleteSession' in interface needs clientId.
-        // *Correction*: I will use a Collection Group query to find and delete strictly for this demo.
         repositoryScope.launch {
             val snapshot = firestore.collectionGroup("sessions")
                 .whereEqualTo("id", sessionId).get().await()
@@ -168,13 +174,11 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
-    // New method to get ALL history logs (needed for ExportDataUseCase)
     override fun getAllHistoryLogs(): Flow<List<HistoryLog>> {
         return historyDao.getAllHistoryLogs().map { entities ->
             entities.map { it.toDomain() }
         }
     }
-
 
     override suspend fun logHistory(log: HistoryLog) {
         historyDao.insertLog(HistoryEntity.fromDomain(log))
@@ -191,7 +195,6 @@ class RaiRepositoryImpl @Inject constructor(
     override suspend fun sync() {
         withContext(Dispatchers.IO) {
             try {
-                // 1. Fetch Clients
                 val clientSnapshot = firestore.collection("clients")
                     .whereNotEqualTo("status", "REMOVED")
                     .get().await()
@@ -199,22 +202,16 @@ class RaiRepositoryImpl @Inject constructor(
                 val clients = clientSnapshot.toObjects(Client::class.java)
                 val clientEntities = clients.map { ClientEntity.fromDomain(it) }
 
-                // Insert/Update Local
                 if (clientEntities.isNotEmpty()) {
                     clientDao.insertClients(clientEntities)
                 }
 
-                // 2. Fetch Sessions for each Client (Parallel-ish)
-                // In a production app, we might use a CollectionGroup query for "sessions"
-                // but we need to map them to client IDs.
                 clients.forEach { client ->
                     val sessionSnapshot = firestore.collection("clients")
                         .document(client.id)
                         .collection("sessions")
                         .get().await()
 
-                    // Need to explicitly set clientId for each session when converting from Firestore object
-                    // because Firestore doesn't implicitly put the parent document ID into subcollection documents
                     val sessions = sessionSnapshot.documents.map { doc ->
                         doc.toObject(Session::class.java)!!.copy(clientId = client.id)
                     }
@@ -225,15 +222,12 @@ class RaiRepositoryImpl @Inject constructor(
                         sessionDao.insertSessions(sessionEntities)
                     }
 
-                    // 3. Fetch History (Optional/Lazy? Fetch mostly recent?)
-                    // For full sync:
                     val historySnapshot = firestore.collection("clients")
                         .document(client.id)
                         .collection("history")
-                        .limit(50) // Limit to recent history for speed
+                        .limit(50)
                         .get().await()
 
-                    // Need to explicitly set clientId for each history log
                     val history = historySnapshot.documents.map { doc ->
                         doc.toObject(HistoryLog::class.java)!!.copy(clientId = client.id)
                     }

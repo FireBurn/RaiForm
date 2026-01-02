@@ -27,6 +27,9 @@ interface RaiRepository {
 
     suspend fun restoreClient(clientId: String)
 
+    // Permanently delete a client
+    suspend fun deleteClient(clientId: String)
+
     // --- Sessions ---
     fun getSessionsForClient(clientId: String): Flow<List<Session>>
 

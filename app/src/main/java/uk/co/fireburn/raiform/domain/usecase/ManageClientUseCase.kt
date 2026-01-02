@@ -30,6 +30,10 @@ class ManageClientUseCase @Inject constructor(
         repository.restoreClient(client.id)
     }
 
+    suspend fun deleteClient(client: Client) {
+        repository.deleteClient(client.id)
+    }
+
     fun getArchivedClients(): Flow<List<Client>> {
         return repository.getArchivedClients()
     }

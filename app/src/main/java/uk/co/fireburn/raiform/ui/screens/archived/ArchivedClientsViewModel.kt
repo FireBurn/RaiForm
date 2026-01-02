@@ -28,4 +28,10 @@ class ArchivedClientsViewModel @Inject constructor(
             manageClientUseCase.restoreClient(client)
         }
     }
+
+    fun deleteClient(client: Client) {
+        viewModelScope.launch {
+            manageClientUseCase.deleteClient(client)
+        }
+    }
 }
