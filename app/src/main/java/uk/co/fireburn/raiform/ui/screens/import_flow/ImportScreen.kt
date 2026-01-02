@@ -45,7 +45,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 
@@ -58,7 +58,6 @@ fun ImportScreen(
     val state by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Handle navigation side-effect when save is successful
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
             onNavigateBack()
@@ -161,6 +160,7 @@ fun ImportScreen(
     }
 }
 
+// ... SessionPreviewCard, ExercisePreviewRow remain same
 @Composable
 fun SessionPreviewCard(session: Session) {
     Card(

@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.NextWeek // Fixed
+import androidx.compose.material.icons.automirrored.filled.NextWeek
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,7 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.ui.components.DartboardClock
@@ -181,7 +181,7 @@ fun MainSchedulerScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.NextWeek, null) // Fixed
+                        Icon(Icons.AutoMirrored.Filled.NextWeek, null)
                         Spacer(Modifier.width(8.dp))
                         Text("NEXT WEEK")
                     }
@@ -204,7 +204,7 @@ fun MainSchedulerScreen(
     }
 }
 
-// ... ClientChip, SessionChip, DayButton remain same
+// ... helper composables remain unchanged
 @Composable
 fun ClientChip(client: Client, isSelected: Boolean, onClick: () -> Unit) {
     FilterChip(

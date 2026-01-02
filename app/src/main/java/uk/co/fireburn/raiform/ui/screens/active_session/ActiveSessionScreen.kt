@@ -61,7 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Exercise
@@ -73,6 +73,7 @@ fun ActiveSessionScreen(
     onNavigateBack: () -> Unit,
     viewModel: ActiveSessionViewModel = hiltViewModel()
 ) {
+    // ... Content same as before
     val state by viewModel.uiState.collectAsState()
     val session = state.session
 
@@ -115,7 +116,8 @@ fun ActiveSessionScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         if (state.isLoading || session == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -212,6 +214,7 @@ fun ActiveSessionScreen(
     }
 }
 
+// ... ActiveExerciseCard, ExerciseDialog, DataBadge remain same
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,

@@ -5,14 +5,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Define the mapping of your colors to Material Design slots
 private val DarkColorScheme = darkColorScheme(
     primary = ElectricYellow,
-    onPrimary = SlateBlack, // High contrast text on yellow buttons
+    onPrimary = SlateBlack,
     primaryContainer = ElectricYellowDark,
 
     secondary = LightningBlue,
@@ -24,15 +22,14 @@ private val DarkColorScheme = darkColorScheme(
 
     surface = CarbonGrey,
     onSurface = WhiteMist,
-    surfaceVariant = DeepSlate, // Slightly lighter for Card backgrounds
-    onSurfaceVariant = AshGrey, // For metadata text (e.g., date)
+    surfaceVariant = DeepSlate,
+    onSurfaceVariant = AshGrey,
 
     error = DangerRed
 )
 
 @Composable
 fun RaiFormTheme(
-    // We default to TRUE to enforce the brand identity regardless of system settings
     darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -42,10 +39,10 @@ fun RaiFormTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Set the status bar to match the app background
-            window.statusBarColor = colorScheme.background.toArgb()
+            // Removed deprecated window.statusBarColor assignment.
+            // Edge-to-edge logic in MainActivity handles transparency.
 
-            // False = White icons on the status bar (because the background is dark)
+            // We still control the icon color (False = White icons for dark theme)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }

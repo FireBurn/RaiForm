@@ -60,13 +60,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.ui.theme.ZeraoraGradient
 
@@ -295,9 +295,7 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
                     color = Color.Black.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold
                 )
-
                 if (nextClientName != null && nextSessionTime != null) {
-                    // Scenario: Session Scheduled
                     Text(
                         text = nextClientName,
                         style = MaterialTheme.typography.headlineMedium,
@@ -311,10 +309,8 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
                         fontWeight = FontWeight.Bold
                     )
                 } else {
-                    // Scenario: Nothing scheduled OR No clients
                     val displayText =
                         if (activeCount == 0) "Add Your Clients" else "Schedule Your Clients"
-
                     Text(
                         text = displayText,
                         style = MaterialTheme.typography.headlineMedium,
@@ -336,6 +332,7 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
     }
 }
 
+// ... ClientCard and EmptyState are the same as previously correct versions
 @Composable
 fun ClientCard(
     client: Client,

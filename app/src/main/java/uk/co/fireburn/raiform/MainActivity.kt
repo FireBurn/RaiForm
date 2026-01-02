@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -35,21 +36,21 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
-    // State to hold the latest intent to trigger Compose side-effects
     private var latestIntent by mutableStateOf<Intent?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Fix for modern Android edge-to-edge requirement
+        enableEdgeToEdge()
+
         createNotificationChannel()
         checkPermissions()
 
-        // Capture initial intent
         latestIntent = intent
 
-        // Handle updates while app is already running (e.g. Widget click)
         addOnNewIntentListener(Consumer { newIntent ->
-            setIntent(newIntent)
+            intent = newIntent
             latestIntent = newIntent
         })
 
@@ -61,7 +62,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
 
-                    // React to intent changes (Deep Links / Widget Navigation)
                     LaunchedEffect(latestIntent) {
                         handleIntent(latestIntent, navController)
                     }
@@ -91,7 +91,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Clear the extras so rotation/recomposition doesn't re-trigger navigation
         intent.removeExtra("navigation_target")
     }
 
