@@ -20,8 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.NextWeek // Fixed
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.NextWeek
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -122,7 +122,6 @@ fun MainSchedulerScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // Day Buttons (Mon - Sun)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -142,7 +141,6 @@ fun MainSchedulerScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Dartboard Clock
                 val taken = state.occupiedSlots[state.selectedDay] ?: emptyList()
 
                 DartboardClock(
@@ -158,7 +156,6 @@ fun MainSchedulerScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Skip Session
                     Button(
                         onClick = { viewModel.skipSession() },
                         modifier = Modifier
@@ -174,7 +171,6 @@ fun MainSchedulerScreen(
                         Text("SKIP")
                     }
 
-                    // Move to Next Week
                     Button(
                         onClick = { viewModel.moveToNextWeek() },
                         modifier = Modifier
@@ -185,13 +181,12 @@ fun MainSchedulerScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     ) {
-                        Icon(Icons.Default.NextWeek, null)
+                        Icon(Icons.AutoMirrored.Filled.NextWeek, null) // Fixed
                         Spacer(Modifier.width(8.dp))
                         Text("NEXT WEEK")
                     }
                 }
             } else if (state.selectedClient != null && state.clientSessions.isNotEmpty()) {
-                // All done state
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -209,6 +204,7 @@ fun MainSchedulerScreen(
     }
 }
 
+// ... ClientChip, SessionChip, DayButton remain same
 @Composable
 fun ClientChip(client: Client, isSelected: Boolean, onClick: () -> Unit) {
     FilterChip(

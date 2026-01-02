@@ -27,7 +27,7 @@ class DatabaseModule {
             RaiFormDatabase::class.java,
             RaiFormDatabase.DATABASE_NAME
         )
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(true)
             .build()
     }
 

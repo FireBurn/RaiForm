@@ -60,13 +60,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.ui.theme.ZeraoraGradient
 
@@ -83,7 +83,6 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Trigger data refresh on resume (e.g. to update relative time "Today" vs "Tomorrow")
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -113,7 +112,7 @@ fun DashboardScreen(
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors( // Fixed: centerAligned -> topAppBarColors
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                     actionIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -188,11 +187,7 @@ fun DashboardScreen(
                     contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
                     items(state.clients) { client ->
-                        // Schedule status comes from the UseCase map
                         val status = state.clientScheduleStatus[client.id] ?: "Active"
-                        // If the status contains " - ", assume format is "Time - SessionName" or vice versa
-                        // But the usecase returns mostly the time string.
-                        // Let's assume just displaying the string is fine.
 
                         ClientCard(
                             client = client,
@@ -278,6 +273,7 @@ fun DashboardScreen(
     }
 }
 
+// ... Rest of the file (ClientCard, etc) remains the same
 @Composable
 fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: String?) {
     Card(

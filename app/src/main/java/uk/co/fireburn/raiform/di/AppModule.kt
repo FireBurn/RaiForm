@@ -18,7 +18,7 @@ class AppModule {
     @Provides
     @Singleton
     fun provideFirestore(): FirebaseFirestore {
-        return Firebase.firestore
+        return Firebase.firestore("raiformdb")
     }
 
     @Provides

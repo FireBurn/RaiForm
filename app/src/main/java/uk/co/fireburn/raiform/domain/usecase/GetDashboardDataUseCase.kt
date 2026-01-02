@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.domain.usecase
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -26,6 +27,7 @@ data class DashboardDisplayData(
 class GetDashboardDataUseCase @Inject constructor(
     private val repository: RaiRepository
 ) {
+    @OptIn(ExperimentalCoroutinesApi::class)
     operator fun invoke(): Flow<DashboardDisplayData> {
         return repository.getActiveClients().flatMapLatest { clients ->
             if (clients.isEmpty()) {
@@ -38,14 +40,12 @@ class GetDashboardDataUseCase @Inject constructor(
                     )
                 )
             } else {
-                // Create a flow for each client's sessions
                 val sessionFlows = clients.map { client ->
                     repository.getSessionsForClient(client.id).map { sessions ->
                         client to sessions
                     }
                 }
 
-                // Combine all session flows into one update
                 combine(sessionFlows) { clientSessionsArray ->
                     val clientSessionMap = clientSessionsArray.associate { it }
                     calculateDashboardData(clients, clientSessionMap)
@@ -65,7 +65,6 @@ class GetDashboardDataUseCase @Inject constructor(
 
         val now = LocalDateTime.now()
 
-        // 1. Calculate schedule for each client
         clients.forEach { client ->
             val sessions = clientSessions[client] ?: emptyList()
             val nextSessionData = getNextSessionDate(sessions, now)
@@ -73,14 +72,9 @@ class GetDashboardDataUseCase @Inject constructor(
             if (nextSessionData != null) {
                 val (session, date) = nextSessionData
                 val formatted = formatSessionTime(date, now)
-
-                // Store status: "Wednesday @ 2:00pm" or "Legs - Today @ 9:00am"
-                // Using just time here, UI can append session name if needed,
-                // but let's stick to the previous ViewModel logic: Time string + Session Name logic
                 val displayString = if (sessions.isNotEmpty()) formatted else "Active"
                 scheduleMap[client.id] = displayString
 
-                // 2. Check Global Best
                 if (globalNextTime == null || date.isBefore(globalNextTime)) {
                     globalNextTime = date
                     globalNextClientName = client.name
@@ -91,7 +85,6 @@ class GetDashboardDataUseCase @Inject constructor(
             }
         }
 
-        // 3. Sort clients: Upcoming sessions first, then by name
         val sortedClients = clients.sortedWith { a, b ->
             val sessionsA = clientSessions[a] ?: emptyList()
             val sessionsB = clientSessions[b] ?: emptyList()
@@ -137,12 +130,6 @@ class GetDashboardDataUseCase @Inject constructor(
                 .withMinute(minute)
                 .withSecond(0)
 
-            // If the calculated time is in the past (e.g. earlier today), move to next week
-            // Unless it's today and we want to show it?
-            // Logic: if it's "Today 9am" and now is "Today 10am", strictly speaking it's gone.
-            // But for a dashboard, maybe we show it until end of day?
-            // Let's keep strict "future" logic or "current week" logic.
-            // Previous logic: if date.isBefore(now) -> plusWeeks(1)
             if (date.isBefore(now)) {
                 date = date.plusWeeks(1)
             }

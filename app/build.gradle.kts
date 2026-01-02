@@ -17,7 +17,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 3
-        versionName = "2.0" // Version bump for re-architecture
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -55,6 +55,7 @@ dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
 
     // Compose
@@ -69,18 +70,18 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 
-    // Hilt (Dependency Injection)
+    // Hilt
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.hilt.work)
     ksp(libs.hilt.compiler)
 
-    // Room (Local Database - Offline First)
+    // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // WorkManager (Background Sync/Reset)
+    // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
     // Firebase
@@ -89,11 +90,11 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
 
-    // Widgets (Glance)
+    // Widgets
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
 
-    // DataStore (Settings)
+    // DataStore
     implementation(libs.androidx.datastore.preferences)
 
     // Third Party

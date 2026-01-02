@@ -25,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -160,6 +161,7 @@ fun ClientStatsScreen(
     }
 }
 
+// ... FunFactCard, PBCard remain same ...
 @Composable
 fun FunFactCard(totalVolume: Double, totalReps: Int, fact: String) {
     Card(
@@ -244,7 +246,7 @@ fun ExerciseSelector(
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .menuAnchor()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true)
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(
