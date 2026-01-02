@@ -1,7 +1,3 @@
-Here is a professional `README.md` for the RaiForm project. It utilizes the `ic_launcher-playstore.png` for the header logo as it provides the highest resolution, and references the round icon for the features section.
-
-***
-
 # RaiForm
 
 <p align="center">
