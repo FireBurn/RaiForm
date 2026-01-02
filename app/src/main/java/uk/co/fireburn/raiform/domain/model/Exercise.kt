@@ -1,31 +1,26 @@
 package uk.co.fireburn.raiform.domain.model
 
-import com.google.firebase.firestore.Exclude
-import com.google.firebase.firestore.IgnoreExtraProperties
-import com.google.firebase.firestore.PropertyName
 import java.util.UUID
 
-@IgnoreExtraProperties // Silences warnings for 'volume' existing in DB but not in constructor
+/**
+ * Domain representation of an Exercise within a Session.
+ * Represents the "Target" for the current week.
+ */
+@kotlinx.serialization.Serializable
 data class Exercise(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
     val weight: Double = 0.0,
-
-    // Maps the DB field "bodyweight" to this property
-    @PropertyName("bodyweight")
     val isBodyweight: Boolean = false,
-
     val sets: Int = 0,
     val reps: Int = 0,
-
     val maintainWeight: Boolean = false,
 
-    // Maps the DB field "done" to this property
-    @PropertyName("done")
+    // Represents the state for the *current active week*
+    // Historical completion is stored separately in HistoryLog
     val isDone: Boolean = false
 ) {
-    // Tells Firestore: "Do not save this to the database, it's just a calculation"
-    @get:Exclude
+    // Calculated property for logic, not stored in DB directly usually
     val volume: Double
         get() = if (isBodyweight) 0.0 else weight * sets * reps
 }

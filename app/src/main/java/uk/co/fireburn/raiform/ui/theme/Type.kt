@@ -14,5 +14,5 @@ val Typography = Typography(
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp
     )
-    // You can add 'titleLarge', 'labelSmall' etc. here later
+    // Additional styles can be defined here as needed
 )

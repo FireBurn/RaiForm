@@ -13,6 +13,7 @@ class SchedulingAlarmReceiver : BroadcastReceiver() {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Create intent to open app directly to Scheduler
         val activityIntent = Intent(context, MainActivity::class.java).apply {
             putExtra("navigation_target", "scheduler")
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -25,7 +26,7 @@ class SchedulingAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Use system icon to avoid build errors if R class generation is flaky
+        // Use system icon as fallback/standard
         val iconRes = android.R.drawable.ic_lock_idle_alarm
 
         val notification = NotificationCompat.Builder(context, "scheduling_channel")

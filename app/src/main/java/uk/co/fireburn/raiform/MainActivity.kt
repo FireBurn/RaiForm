@@ -14,15 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
-import uk.co.fireburn.raiform.presentation.dashboard.DashboardScreen
-import uk.co.fireburn.raiform.presentation.smart_import.ImportScreen
+import uk.co.fireburn.raiform.ui.navigation.ActiveSession
+import uk.co.fireburn.raiform.ui.navigation.AppNavigation
+import uk.co.fireburn.raiform.ui.navigation.Scheduler
 import uk.co.fireburn.raiform.ui.theme.RaiFormTheme
 
 @AndroidEntryPoint
@@ -32,15 +35,22 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
+    // State to hold the latest intent to trigger Compose side-effects
+    private var latestIntent by mutableStateOf<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         createNotificationChannel()
         checkPermissions()
 
-        // Listen for new intents (Widget Deep Links)
-        addOnNewIntentListener(Consumer { intent ->
-            setIntent(intent)
+        // Capture initial intent
+        latestIntent = intent
+
+        // Handle updates while app is already running (e.g. Widget click)
+        addOnNewIntentListener(Consumer { newIntent ->
+            setIntent(newIntent)
+            latestIntent = newIntent
         })
 
         setContent {
@@ -51,69 +61,38 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
 
-                    LaunchedEffect(Unit) {
-                        handleIntent(intent, navController)
+                    // React to intent changes (Deep Links / Widget Navigation)
+                    LaunchedEffect(latestIntent) {
+                        handleIntent(latestIntent, navController)
                     }
 
-                    NavHost(
-                        navController = navController,
-                        startDestination = "dashboard"
-                    ) {
-                        composable("dashboard") {
-                            DashboardScreen(navController = navController)
-                        }
-                        composable("import") {
-                            ImportScreen(navController = navController)
-                        }
-                        composable("client_details/{clientId}") {
-                            uk.co.fireburn.raiform.presentation.client_details.ClientDetailsScreen(
-                                navController = navController
-                            )
-                        }
-                        composable("active_session/{clientId}/{sessionId}") {
-                            uk.co.fireburn.raiform.presentation.active_session.ActiveSessionScreen(
-                                navController = navController
-                            )
-                        }
-                        composable("archived_clients") {
-                            uk.co.fireburn.raiform.presentation.archived.ArchivedClientsScreen(
-                                navController
-                            )
-                        }
-                        composable("main_scheduler") {
-                            uk.co.fireburn.raiform.presentation.scheduler.MainSchedulerScreen(
-                                navController
-                            )
-                        }
-                        composable("settings") {
-                            uk.co.fireburn.raiform.presentation.settings.SettingsScreen(
-                                navController
-                            )
-                        }
-                        composable("client_stats/{clientId}") {
-                            uk.co.fireburn.raiform.presentation.client_stats.ClientStatsScreen(
-                                navController
-                            )
-                        }
-                    }
+                    AppNavigation(navController = navController)
                 }
             }
         }
     }
 
-    private fun handleIntent(intent: Intent?, navController: androidx.navigation.NavController) {
-        val target = intent?.getStringExtra("navigation_target")
-        val clientId = intent?.getStringExtra("client_id")
-        val sessionId = intent?.getStringExtra("session_id")
+    private fun handleIntent(intent: Intent?, navController: NavHostController) {
+        if (intent == null) return
+
+        val target = intent.getStringExtra("navigation_target")
+        val clientId = intent.getStringExtra("client_id")
+        val sessionId = intent.getStringExtra("session_id")
 
         when (target) {
-            "scheduler" -> navController.navigate("main_scheduler")
+            "scheduler" -> {
+                navController.navigate(Scheduler)
+            }
+
             "session" -> {
                 if (clientId != null && sessionId != null) {
-                    navController.navigate("active_session/$clientId/$sessionId")
+                    navController.navigate(ActiveSession(clientId, sessionId))
                 }
             }
         }
+
+        // Clear the extras so rotation/recomposition doesn't re-trigger navigation
+        intent.removeExtra("navigation_target")
     }
 
     private fun createNotificationChannel() {
@@ -141,6 +120,4 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    // Explicit override removed as we are using addOnNewIntentListener which is safer across versions
 }

@@ -1,6 +1,5 @@
 package uk.co.fireburn.raiform.domain.model
 
-import com.google.firebase.firestore.PropertyName
 import java.util.UUID
 
 data class Session(
@@ -14,11 +13,6 @@ data class Session(
     val scheduledMinute: Int? = null,
 
     val lastResetTimestamp: Long = 0L,
-
-    // Fix for Firestore Warning: Explicitly map property name
-    // CHANGED: Removed 'get:' target to ensure it applies to the constructor parameter for deserialization
-    @PropertyName("skippedThisWeek")
     val isSkippedThisWeek: Boolean = false,
-
     val tempRescheduleTimestamp: Long? = null
 )
