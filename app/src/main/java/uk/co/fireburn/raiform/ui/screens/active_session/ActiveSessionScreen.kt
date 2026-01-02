@@ -8,7 +8,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,7 +31,6 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Timer
@@ -67,7 +64,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -76,8 +72,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.flow.collectLatest
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Exercise
 import kotlin.math.abs
 
@@ -104,20 +98,6 @@ fun ActiveSessionScreen(
 
     var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
-
-    val lazyListState = rememberLazyListState()
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val currentSession = viewModel.uiState.value.session
-        if (currentSession != null) {
-            val list = currentSession.exercises.toMutableList()
-            // Adjust indices because Timer is item 0
-            if (from.index - 1 in list.indices && to.index - 1 in list.indices) {
-                val item = list.removeAt(from.index - 1)
-                list.add(to.index - 1, item)
-                viewModel.reorderExercises(list)
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -151,7 +131,6 @@ fun ActiveSessionScreen(
             }
         } else {
             LazyColumn(
-                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
@@ -167,31 +146,17 @@ fun ActiveSessionScreen(
                     )
                 }
 
-                // 2. Reorderable List of Exercises
+                // 2. List of Exercises (Alphabetically sorted in ViewModel)
                 items(session.exercises, key = { it.id }) { exercise ->
-                    ReorderableItem(reorderableState, key = exercise.id) { isDragging ->
-                        val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
-
-                        Box(modifier = Modifier.shadow(elevation.value)) {
-                            ActiveExerciseCard(
-                                exercise = exercise,
-                                onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                                onEdit = {
-                                    isCreatingNew = false
-                                    exerciseInDialog = exercise
-                                },
-                                onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) },
-                                dragHandle = {
-                                    Icon(
-                                        imageVector = Icons.Default.DragHandle,
-                                        contentDescription = "Reorder",
-                                        modifier = Modifier.draggableHandle(),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            )
-                        }
-                    }
+                    ActiveExerciseCard(
+                        exercise = exercise,
+                        onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                        onEdit = {
+                            isCreatingNew = false
+                            exerciseInDialog = exercise
+                        },
+                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
+                    )
                 }
 
                 item {
@@ -340,14 +305,21 @@ fun RestTimerHeader(
     }
 }
 
-// ... ActiveExerciseCard, ExerciseDialog, DataBadge remain unchanged ...
+// Helper to format Double weight (removes .0 if whole number)
+private fun formatWeight(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        value.toString()
+    }
+}
+
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onToggleMaintain: () -> Unit,
-    dragHandle: @Composable () -> Unit
+    onToggleMaintain: () -> Unit
 ) {
     val cardColor = if (exercise.isDone)
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -365,8 +337,7 @@ fun ActiveExerciseCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            dragHandle()
-            Spacer(modifier = Modifier.width(12.dp))
+            // Drag handle removed
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (exercise.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -392,12 +363,12 @@ fun ActiveExerciseCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val weightText = if (exercise.isBodyweight) {
                         when {
-                            exercise.weight > 0 -> "BW + ${exercise.weight}kg"
-                            exercise.weight < 0 -> "BW - ${abs(exercise.weight)}kg"
+                            exercise.weight > 0 -> "BW + ${formatWeight(exercise.weight)}kg"
+                            exercise.weight < 0 -> "BW - ${formatWeight(abs(exercise.weight))}kg"
                             else -> "Body Weight"
                         }
                     } else {
-                        "${exercise.weight}kg"
+                        "${formatWeight(exercise.weight)}kg"
                     }
                     DataBadge(text = weightText, isActive = !exercise.isDone)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -438,7 +409,8 @@ fun ExerciseDialog(
     onDelete: () -> Unit
 ) {
     var nameText by remember { mutableStateOf(exercise.name) }
-    var weightText by remember { mutableStateOf(abs(exercise.weight).toString()) }
+    // Use formatWeight for initial display
+    var weightText by remember { mutableStateOf(formatWeight(abs(exercise.weight))) }
     var weightModifier by remember { mutableStateOf(if (exercise.weight >= 0) 1 else -1) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }

@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
 import uk.co.fireburn.raiform.domain.usecase.ManageSessionUseCase
@@ -57,7 +56,11 @@ class ActiveSessionViewModel @Inject constructor(
     private fun loadSession() {
         viewModelScope.launch {
             repository.getSession(sessionId).collect { session ->
-                _uiState.update { it.copy(session = session, isLoading = false) }
+                // Sort exercises alphabetically by name
+                val sortedSession = session?.copy(
+                    exercises = session.exercises.sortedBy { it.name }
+                )
+                _uiState.update { it.copy(session = sortedSession, isLoading = false) }
             }
         }
     }
@@ -109,15 +112,7 @@ class ActiveSessionViewModel @Inject constructor(
         }
     }
 
-    fun reorderExercises(newOrder: List<Exercise>) {
-        val currentSession = _uiState.value.session ?: return
-        val updatedSession = currentSession.copy(exercises = newOrder)
-        _uiState.update { it.copy(session = updatedSession) }
-
-        viewModelScope.launch {
-            manageSessionUseCase.reorderExercises(clientId, currentSession, newOrder)
-        }
-    }
+    // reorderExercises function removed as requested
 
     fun addExercise(name: String, weight: Double, isBodyweight: Boolean, sets: Int, reps: Int) {
         val currentSession = _uiState.value.session ?: return
