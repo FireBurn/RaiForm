@@ -60,13 +60,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.ui.theme.ZeraoraGradient
 
@@ -112,7 +112,7 @@ fun DashboardScreen(
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors( // Fixed: centerAligned -> topAppBarColors
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.primary,
                     actionIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -273,7 +273,6 @@ fun DashboardScreen(
     }
 }
 
-// ... Rest of the file (ClientCard, etc) remains the same
 @Composable
 fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: String?) {
     Card(
@@ -296,7 +295,9 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
                     color = Color.Black.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold
                 )
+
                 if (nextClientName != null && nextSessionTime != null) {
+                    // Scenario: Session Scheduled
                     Text(
                         text = nextClientName,
                         style = MaterialTheme.typography.headlineMedium,
@@ -310,8 +311,12 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
                         fontWeight = FontWeight.Bold
                     )
                 } else {
+                    // Scenario: Nothing scheduled OR No clients
+                    val displayText =
+                        if (activeCount == 0) "Add Your Clients" else "Schedule Your Clients"
+
                     Text(
-                        text = "$activeCount Clients Active",
+                        text = displayText,
                         style = MaterialTheme.typography.headlineMedium,
                         color = Color.Black,
                         fontWeight = FontWeight.ExtraBold
