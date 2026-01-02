@@ -3,9 +3,11 @@ package uk.co.fireburn.raiform.ui.screens.scheduler
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.model.Client
@@ -25,7 +27,10 @@ data class SchedulerState(
     val selectedDay: Int = 1, // 1=Mon
     val selectedHour: Int = -1, // -1 = None
 
-    val occupiedSlots: Map<Int, List<Int>> = emptyMap()
+    val occupiedSlots: Map<Int, List<Int>> = emptyMap(),
+
+    // New flag to indicate the entire process is finished
+    val isAllSchedulingComplete: Boolean = false
 )
 
 @HiltViewModel
@@ -37,38 +42,45 @@ class MainSchedulerViewModel @Inject constructor(
     private val _state = MutableStateFlow(SchedulerState())
     val state = _state.asStateFlow()
 
+    // Keep track of the session collection job to cancel it when switching clients
+    private var currentSessionsJob: Job? = null
+
     init {
         loadInitialData()
     }
 
     private fun loadInitialData() {
         viewModelScope.launch {
-            repository.getActiveClients().collect { clients ->
-                _state.update { it.copy(clients = clients) }
-            }
-        }
-        refreshGlobalSlots()
-    }
-
-    private fun refreshGlobalSlots() {
-        viewModelScope.launch {
-            repository.getAllSessions().collect { allSessions ->
-                _state.update { it.copy(allGlobalSessions = allSessions) }
+            combine(
+                repository.getActiveClients(),
+                repository.getAllSessions()
+            ) { activeClients, allSessions ->
+                Pair(activeClients, allSessions)
+            }.collect { (clients, sessions) ->
+                _state.update {
+                    it.copy(
+                        clients = clients,
+                        allGlobalSessions = sessions
+                    )
+                }
                 calculateOccupiedSlots()
             }
         }
     }
 
     private fun calculateOccupiedSlots() {
-        val all = _state.value.allGlobalSessions
+        val currentState = _state.value
+        val allSessions = currentState.allGlobalSessions
+        val activeClientIds = currentState.clients.map { it.id }.toSet()
         val map = mutableMapOf<Int, MutableList<Int>>()
 
-        all.forEach { session ->
-            if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
-                // If editing, don't show current session's OLD time as occupied
-                if (session.id != _state.value.selectedSession?.id) {
-                    val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
-                    list.add(session.scheduledHour)
+        allSessions.forEach { session ->
+            if (activeClientIds.contains(session.clientId)) {
+                if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
+                    if (session.id != currentState.selectedSession?.id) {
+                        val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
+                        list.add(session.scheduledHour)
+                    }
                 }
             }
         }
@@ -76,15 +88,25 @@ class MainSchedulerViewModel @Inject constructor(
     }
 
     fun selectClient(client: Client) {
-        viewModelScope.launch {
-            _state.update { it.copy(selectedClient = client, selectedSession = null) }
+        // Cancel previous collection to avoid race conditions
+        currentSessionsJob?.cancel()
+
+        // Reset complete flag when manually selecting a client
+        _state.update {
+            it.copy(
+                selectedClient = client,
+                selectedSession = null,
+                isAllSchedulingComplete = false
+            )
+        }
+
+        currentSessionsJob = viewModelScope.launch {
             repository.getSessionsForClient(client.id).collect { sessions ->
-                // Sort sessions: Scheduled first, then Unscheduled
                 val sortedSessions = sessions.sortedWith(
                     compareBy(
-                        { it.scheduledDay ?: 8 },     // Days 1-7 first, null (8) last
-                        { it.scheduledHour ?: 25 },   // Hours 0-23 first, null (25) last
-                        { it.scheduledMinute ?: 61 }, // Minutes 0-59 first
+                        { it.scheduledDay ?: 8 },
+                        { it.scheduledHour ?: 25 },
+                        { it.scheduledMinute ?: 61 },
                         { it.name }
                     )
                 )
@@ -112,16 +134,12 @@ class MainSchedulerViewModel @Inject constructor(
 
     fun selectDay(day: Int) {
         _state.update { it.copy(selectedDay = day) }
-        // We do NOT auto-save on Day change, user must pick a time.
     }
 
     fun selectHour(hour: Int) {
-        // 1. Visual Cue: Update UI immediately
         _state.update { it.copy(selectedHour = hour) }
-
-        // 2. Trigger Auto-Save & Advance after short delay
         viewModelScope.launch {
-            delay(300) // Visible delay for user to see selection
+            delay(300)
             saveSchedule()
         }
     }
@@ -133,17 +151,11 @@ class MainSchedulerViewModel @Inject constructor(
 
         viewModelScope.launch {
             manageSessionUseCase.toggleSkipSession(client.id, session)
-            // Note: toggle usually flips boolean, here we want to ensure SKIP.
-            // Ideally use case has specific 'skip' method, or we check state.
-            // Assuming toggle logic: if it wasn't skipped, now it is.
-
-            // Advance UI
             selectNextSession(session.id)
         }
     }
 
     fun moveToNextWeek() {
-        // Behaves like skip for now
         skipSession()
     }
 
@@ -156,25 +168,43 @@ class MainSchedulerViewModel @Inject constructor(
                     s.selectedSession,
                     s.selectedDay,
                     s.selectedHour,
-                    0 // default minute 0 for scheduler
+                    0
                 )
-                // Advance UI
                 selectNextSession(s.selectedSession.id)
             }
         }
     }
 
     private fun selectNextSession(currentId: String) {
-        val currentList = _state.value.clientSessions
+        val currentState = _state.value
+        val currentList = currentState.clientSessions
         val index = currentList.indexOfFirst { it.id == currentId }
 
         if (index != -1 && index < currentList.size - 1) {
-            // Move to next
+            // 1. More sessions for THIS client
             val nextSession = currentList[index + 1]
             selectSession(nextSession)
         } else {
-            // Done with this client
-            _state.update { it.copy(selectedSession = null, selectedHour = -1) }
+            // 2. Client finished, try to move to NEXT client
+            val currentClient = currentState.selectedClient ?: return
+            val clientList = currentState.clients
+            val clientIndex = clientList.indexOfFirst { it.id == currentClient.id }
+
+            if (clientIndex != -1 && clientIndex < clientList.size - 1) {
+                // Select next client (This will trigger loading sessions and auto-selecting the first one)
+                val nextClient = clientList[clientIndex + 1]
+                selectClient(nextClient)
+            } else {
+                // 3. All clients finished!
+                _state.update {
+                    it.copy(
+                        selectedClient = null,
+                        selectedSession = null,
+                        selectedHour = -1,
+                        isAllSchedulingComplete = true
+                    )
+                }
+            }
         }
     }
 }

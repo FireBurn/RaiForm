@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NextWeek
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,140 +73,187 @@ fun MainSchedulerScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            // 1. SELECT CLIENT
-            Text(
-                "1. Select Client",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
+        if (state.isAllSchedulingComplete) {
+            // Show Success Screen
+            SchedulingCompleteView(
+                modifier = Modifier.padding(padding),
+                onBack = onNavigateBack
             )
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.clients) { client ->
-                    ClientChip(
-                        client = client,
-                        isSelected = state.selectedClient?.id == client.id,
-                        onClick = { viewModel.selectClient(client) }
-                    )
-                }
-            }
-
-            // 2. SELECT SESSION
-            if (state.clientSessions.isNotEmpty()) {
+        } else {
+            // Show Normal Scheduler
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // 1. SELECT CLIENT
                 Text(
-                    "2. Select Session",
+                    "1. Select Client",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
+
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.clientSessions) { session ->
-                        SessionChip(
-                            session = session,
-                            isSelected = state.selectedSession?.id == session.id,
-                            onClick = { viewModel.selectSession(session) }
-                        )
-                    }
-                }
-            }
-
-            // 3. SCHEDULE (Day & Time)
-            if (state.selectedSession != null) {
-                Text(
-                    "3. Assign Schedule",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (day in 1..7) {
-                        val dayName =
-                            DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault())
-
-                        DayButton(
-                            text = dayName,
-                            isSelected = state.selectedDay == day,
-                            onClick = { viewModel.selectDay(day) },
-                            modifier = Modifier.weight(1f)
+                    items(state.clients) { client ->
+                        ClientChip(
+                            client = client,
+                            isSelected = state.selectedClient?.id == client.id,
+                            onClick = { viewModel.selectClient(client) }
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val taken = state.occupiedSlots[state.selectedDay] ?: emptyList()
-
-                DartboardClock(
-                    takenHours = taken,
-                    selectedHour = state.selectedHour,
-                    onHourSelected = { viewModel.selectHour(it) }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 4. ACTION BUTTONS (Skip / Next Week)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Button(
-                        onClick = { viewModel.skipSession() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(Icons.Default.Cancel, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("SKIP")
-                    }
-
-                    Button(
-                        onClick = { viewModel.moveToNextWeek() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.NextWeek, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("NEXT WEEK")
-                    }
-                }
-            } else if (state.selectedClient != null && state.clientSessions.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                // 2. SELECT SESSION
+                if (state.clientSessions.isNotEmpty()) {
                     Text(
-                        "All sessions scheduled!",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.Green
+                        "2. Select Session",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(state.clientSessions) { session ->
+                            SessionChip(
+                                session = session,
+                                isSelected = state.selectedSession?.id == session.id,
+                                onClick = { viewModel.selectSession(session) }
+                            )
+                        }
+                    }
+                }
+
+                // 3. SCHEDULE (Day & Time)
+                if (state.selectedSession != null) {
+                    Text(
+                        "3. Assign Schedule",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        for (day in 1..7) {
+                            val dayName =
+                                DayOfWeek.of(day)
+                                    .getDisplayName(TextStyle.SHORT, Locale.getDefault())
+
+                            DayButton(
+                                text = dayName,
+                                isSelected = state.selectedDay == day,
+                                onClick = { viewModel.selectDay(day) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val taken = state.occupiedSlots[state.selectedDay] ?: emptyList()
+
+                    DartboardClock(
+                        takenHours = taken,
+                        selectedHour = state.selectedHour,
+                        onHourSelected = { viewModel.selectHour(it) }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 4. ACTION BUTTONS (Skip / Next Week)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.skipSession() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Cancel, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("SKIP")
+                        }
+
+                        Button(
+                            onClick = { viewModel.moveToNextWeek() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.NextWeek, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("NEXT WEEK")
+                        }
+                    }
+                } else if (state.selectedClient != null && state.clientSessions.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "All sessions scheduled!",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.Green
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-// ... helper composables remain unchanged
+@Composable
+fun SchedulingCompleteView(modifier: Modifier = Modifier, onBack: () -> Unit) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = "Done",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(120.dp)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "All Done!",
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Everyone is scheduled for the week.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = onBack,
+            modifier = Modifier
+                .fillMaxWidth(0.6f)
+                .height(56.dp)
+        ) {
+            Text("Back to Dashboard")
+        }
+    }
+}
+
 @Composable
 fun ClientChip(client: Client, isSelected: Boolean, onClick: () -> Unit) {
     FilterChip(
