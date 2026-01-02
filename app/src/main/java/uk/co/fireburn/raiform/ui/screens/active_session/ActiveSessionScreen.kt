@@ -1,6 +1,15 @@
 package uk.co.fireburn.raiform.ui.screens.active_session
 
+import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +36,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +48,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -48,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,11 +69,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import kotlinx.coroutines.flow.collectLatest
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Exercise
@@ -73,9 +87,20 @@ fun ActiveSessionScreen(
     onNavigateBack: () -> Unit,
     viewModel: ActiveSessionViewModel = hiltViewModel()
 ) {
-    // ... Content same as before
     val state by viewModel.uiState.collectAsState()
     val session = state.session
+    val context = LocalContext.current
+
+    // Listen for Timer Finished Event
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is ActiveSessionEvent.TimerFinished -> {
+                    triggerAlert(context)
+                }
+            }
+        }
+    }
 
     var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
@@ -85,9 +110,10 @@ fun ActiveSessionScreen(
         val currentSession = viewModel.uiState.value.session
         if (currentSession != null) {
             val list = currentSession.exercises.toMutableList()
-            if (from.index in list.indices && to.index in list.indices) {
-                val item = list.removeAt(from.index)
-                list.add(to.index, item)
+            // Adjust indices because Timer is item 0
+            if (from.index - 1 in list.indices && to.index - 1 in list.indices) {
+                val item = list.removeAt(from.index - 1)
+                list.add(to.index - 1, item)
                 viewModel.reorderExercises(list)
             }
         }
@@ -132,7 +158,16 @@ fun ActiveSessionScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Reorderable List of Exercises
+                // 1. Rest Timer Header
+                item {
+                    RestTimerHeader(
+                        isRunning = state.isTimerRunning,
+                        timeLeft = state.timerValue,
+                        onToggle = { viewModel.toggleRestTimer() }
+                    )
+                }
+
+                // 2. Reorderable List of Exercises
                 items(session.exercises, key = { it.id }) { exercise ->
                     ReorderableItem(reorderableState, key = exercise.id) { isDragging ->
                         val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
@@ -214,7 +249,98 @@ fun ActiveSessionScreen(
     }
 }
 
-// ... ActiveExerciseCard, ExerciseDialog, DataBadge remain same
+// Function to handle sound and vibration
+private fun triggerAlert(context: Context) {
+    try {
+        // 1. Play Sound (Beep)
+        val toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
+
+        // 2. Vibrate
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager =
+                context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    500,
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(500)
+        }
+
+        // 3. Visual Feedback
+        Toast.makeText(context, "Rest Finished! Go!", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+@Composable
+fun RestTimerHeader(
+    isRunning: Boolean,
+    timeLeft: Int,
+    onToggle: () -> Unit
+) {
+    val progress by animateFloatAsState(
+        targetValue = if (isRunning) timeLeft / 60f else 1f,
+        label = "TimerProgress"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clickable { onToggle() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isRunning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (isRunning) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                    trackColor = Color.Transparent,
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Timer,
+                    contentDescription = null,
+                    tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isRunning) "Resting... ${timeLeft}s" else "Start Rest Timer (60s)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+// ... ActiveExerciseCard, ExerciseDialog, DataBadge remain unchanged ...
 @Composable
 fun ActiveExerciseCard(
     exercise: Exercise,
