@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
@@ -46,17 +47,34 @@ class ClientStatsViewModel @Inject constructor(
 
     private fun loadStats() {
         viewModelScope.launch {
-            repository.getHistoryForClient(clientId).collect { historyLogs ->
+            // Combine History (Past weeks) AND Active Sessions (This week)
+            combine(
+                repository.getHistoryForClient(clientId),
+                repository.getSessionsForClient(clientId)
+            ) { historyLogs, activeSessions ->
 
-                // Flatten exercises from all history logs
-                // HistoryLog contains a snapshot of exercises at that specific time
-                val allExercisesWithDate = historyLogs.flatMap { log ->
+                // 1. Process Historical Data
+                val historyExercises = historyLogs.flatMap { log ->
                     log.exercises.filter { it.isDone }.map { exercise ->
                         exercise to log.dateLogged
                     }
                 }
 
-                // 1. Total Volume & Reps
+                // 2. Process Active Data (Current week's checked items)
+                // We use the lastResetTimestamp or current time if it's a new session
+                val activeExercises = activeSessions.flatMap { session ->
+                    session.exercises.filter { it.isDone }.map { exercise ->
+                        // If the session hasn't been reset yet (new), use current time for the graph
+                        val date =
+                            if (session.lastResetTimestamp > 0) session.lastResetTimestamp else System.currentTimeMillis()
+                        exercise to date
+                    }
+                }
+
+                // Merge both lists
+                val allExercisesWithDate = historyExercises + activeExercises
+
+                // 3. Total Volume & Reps
                 var volume = 0.0
                 var reps = 0
                 allExercisesWithDate.forEach { (ex, _) ->
@@ -66,7 +84,7 @@ class ClientStatsViewModel @Inject constructor(
                     }
                 }
 
-                // 2. Personal Bests
+                // 4. Personal Bests
                 val pbs = allExercisesWithDate
                     .groupBy { it.first.name.trim().lowercase() }
                     .mapNotNull { (_, list) ->
@@ -78,7 +96,7 @@ class ClientStatsViewModel @Inject constructor(
                     }
                     .sortedByDescending { it.weight }
 
-                // 3. Graph Data
+                // 5. Graph Data
                 val graphMap = allExercisesWithDate
                     .groupBy { it.first.name }
                     .mapValues { (_, list) ->
@@ -93,18 +111,18 @@ class ClientStatsViewModel @Inject constructor(
                 val newSelection =
                     if (currentSelection in exerciseList) currentSelection else exerciseList.firstOrNull()
 
-                _uiState.update {
-                    it.copy(
-                        totalVolumeKg = volume,
-                        totalReps = reps,
-                        funFact = generateFunFact(volume, reps),
-                        personalBests = pbs,
-                        graphData = graphMap,
-                        exerciseNames = exerciseList,
-                        selectedGraphExercise = newSelection,
-                        isLoading = false
-                    )
-                }
+                StatsUiState(
+                    totalVolumeKg = volume,
+                    totalReps = reps,
+                    funFact = generateFunFact(volume, reps),
+                    personalBests = pbs,
+                    graphData = graphMap,
+                    exerciseNames = exerciseList,
+                    selectedGraphExercise = newSelection,
+                    isLoading = false
+                )
+            }.collect { newState ->
+                _uiState.value = newState
             }
         }
     }

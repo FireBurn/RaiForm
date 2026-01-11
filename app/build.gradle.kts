@@ -16,7 +16,7 @@ android {
         applicationId = "uk.co.fireburn.raiform"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
+        versionCode = 10
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
