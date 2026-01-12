@@ -1,6 +1,8 @@
 package uk.co.fireburn.raiform.ui.screens.active_session
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
@@ -246,10 +248,32 @@ fun ActiveSessionScreen(
     }
 }
 
+/**
+ * Plays the default alarm sound.
+ * Checks for Silent/Vibrate mode first to avoid disruption.
+ * Sets AudioAttributes to ALARM to ensure correct routing.
+ */
 private fun playAlarmSound(context: Context): Ringtone? {
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    // Don't play sound if the phone is in Silent or Vibrate mode
+    if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT ||
+        audioManager.ringerMode == AudioManager.RINGER_MODE_VIBRATE
+    ) {
+        return null
+    }
+
     return try {
         val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         val r = RingtoneManager.getRingtone(context, notification)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            r.audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             r.isLooping = true // Loop until stopped
         }
