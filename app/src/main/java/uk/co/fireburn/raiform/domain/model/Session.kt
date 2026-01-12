@@ -6,12 +6,12 @@ import java.util.UUID
 @Serializable
 data class Session(
     val id: String = UUID.randomUUID().toString(),
-    val clientId: String,
+    val clientId: String = "", // Default empty
     val name: String = "",
     val exercises: List<Exercise> = emptyList(),
 
-    // Scheduling
-    val scheduledDay: Int? = null, // 1=Mon ... 7=Sun
+    // Scheduling (Nullable in JSON = null in Kotlin, missing in JSON = null)
+    val scheduledDay: Int? = null,
     val scheduledHour: Int? = null,
     val scheduledMinute: Int? = null,
 

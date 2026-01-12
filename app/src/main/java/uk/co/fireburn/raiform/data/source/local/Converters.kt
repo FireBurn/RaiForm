@@ -7,7 +7,10 @@ import uk.co.fireburn.raiform.domain.model.Exercise
 
 class Converters {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     // --- ClientStatus Enum ---
     @TypeConverter

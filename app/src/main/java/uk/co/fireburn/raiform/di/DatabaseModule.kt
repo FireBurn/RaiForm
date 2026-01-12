@@ -27,7 +27,11 @@ class DatabaseModule {
             RaiFormDatabase::class.java,
             RaiFormDatabase.DATABASE_NAME
         )
-            .fallbackToDestructiveMigration(true)
+            // Register migrations to safely update the schema without losing data
+            .addMigrations(
+                RaiFormDatabase.MIGRATION_1_3, // For users upgrading from V1
+                RaiFormDatabase.MIGRATION_2_3  // For users upgrading from V2
+            )
             .build()
     }
 

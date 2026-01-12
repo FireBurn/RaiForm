@@ -16,41 +16,49 @@ import uk.co.fireburn.raiform.data.source.local.relation.SessionPopulated
 @Dao
 interface SessionDao {
 
-    // --- Reads (Return Populated Objects) ---
+    // --- Reads (UI ignores deleted) ---
 
     @Transaction
-    @Query("SELECT * FROM sessions WHERE clientId = :clientId ORDER BY scheduledDay ASC, scheduledHour ASC")
+    @Query("SELECT * FROM sessions WHERE clientId = :clientId AND isDeleted = 0 ORDER BY scheduledDay ASC, scheduledHour ASC")
     fun getSessionsForClient(clientId: String): Flow<List<SessionPopulated>>
 
     @Transaction
-    @Query("SELECT * FROM sessions WHERE id = :sessionId")
+    @Query("SELECT * FROM sessions WHERE id = :sessionId AND isDeleted = 0")
     fun getSessionById(sessionId: String): Flow<SessionPopulated?>
 
-    /**
-     * Gets all sessions for the Global Scheduler.
-     */
     @Transaction
-    @Query("SELECT * FROM sessions")
+    @Query("SELECT * FROM sessions WHERE isDeleted = 0")
     fun getAllSessions(): Flow<List<SessionPopulated>>
 
-    // --- Session Management ---
+    // --- Sync Query (Includes deleted) ---
+    // Note: We return SessionEntity here (flat), not Populated, for simpler syncing
+    @Query("SELECT * FROM sessions WHERE lastSyncTimestamp > :timestamp")
+    suspend fun getSessionsForSync(timestamp: Long): List<SessionEntity>
+
+    // --- Write ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: SessionEntity)
 
+    // Used by Sync Pull
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSessions(sessions: List<SessionEntity>)
 
     @Update
     suspend fun updateSession(session: SessionEntity)
 
+    // SOFT DELETE
+    @Query("UPDATE sessions SET isDeleted = 1, lastSyncTimestamp = :timestamp WHERE id = :sessionId")
+    suspend fun softDeleteSession(sessionId: String, timestamp: Long)
+
+    // Hard Delete (Only for cleanup if needed later)
     @Query("DELETE FROM sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)
 
     @Query("DELETE FROM sessions WHERE clientId = :clientId")
     suspend fun deleteSessionsForClient(clientId: String)
 
-    // --- Template Management (The Data Source) ---
+    // --- Template Management ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTemplate(template: ExerciseTemplateEntity)
@@ -64,11 +72,8 @@ interface SessionDao {
     @Query("SELECT * FROM exercise_templates WHERE id = :templateId")
     suspend fun getTemplateById(templateId: String): ExerciseTemplateEntity?
 
-    // --- Link Management (The Connection) ---
+    // --- Link Management ---
 
-    /**
-     * Used for diffing in the Repository. Fetches the raw join entities.
-     */
     @Query("SELECT * FROM session_exercises WHERE sessionId = :sessionId")
     suspend fun getLinksForSession(sessionId: String): List<SessionExerciseEntity>
 
@@ -90,15 +95,9 @@ interface SessionDao {
     @Delete
     suspend fun deleteLink(link: SessionExerciseEntity)
 
-    /**
-     * Deletes a specific list of links. Used during saveSession diffing.
-     */
     @Delete
     suspend fun deleteLinks(links: List<SessionExerciseEntity>)
 
-    /**
-     * Nuke option: Deletes all links for a session.
-     */
     @Query("DELETE FROM session_exercises WHERE sessionId = :sessionId")
     suspend fun clearLinksForSession(sessionId: String)
 }

@@ -11,26 +11,37 @@ class ImportDataUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(inputUri: Uri): Result<Unit> {
         return try {
+            // 1. Parse the JSON file
+            // The DataImporter now handles lenient parsing and default values
+            // for old backup files missing new fields.
             val importedData = dataImporter.importFromJson(inputUri)
 
-            // 1. Import Clients
+            // 2. Import Clients
+            // Saving via Repository converts Domain -> Entity, setting
+            // lastSyncTimestamp to System.currentTimeMillis() and isDeleted to false.
             importedData.clients.forEach { client ->
                 repository.saveClient(client)
             }
 
-            // 2. Import Sessions
+            // 3. Import Sessions
             importedData.sessions.forEach { session ->
-                // Session now contains clientId, so we can directly save it
+                // This handles the relational reconstruction (Templates/Links)
                 repository.saveSession(session)
             }
 
-            // 3. Import History Logs
+            // 4. Import History Logs
             importedData.historyLogs.forEach { historyLog ->
                 repository.logHistory(historyLog)
             }
 
+            // 5. Trigger Immediate Sync
+            // Since all imported items now have a fresh timestamp,
+            // this will push them to Firestore as "New/Updated" data.
+            repository.sync()
+
             Result.success(Unit)
         } catch (e: Exception) {
+            e.printStackTrace()
             Result.failure(e)
         }
     }

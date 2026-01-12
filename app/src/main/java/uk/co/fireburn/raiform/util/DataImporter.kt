@@ -16,6 +16,9 @@ class DataImporter @Inject constructor(
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+        isLenient = true
     }
 
     suspend fun importFromJson(inputUri: Uri): ExportData {

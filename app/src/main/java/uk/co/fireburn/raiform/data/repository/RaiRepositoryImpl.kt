@@ -58,7 +58,6 @@ class RaiRepositoryImpl @Inject constructor(
 
     override suspend fun saveClient(client: Client) {
         val entity = ClientEntity.fromDomain(client)
-        // Perform manual Upsert to avoid REPLACE causing Cascade Delete of Sessions
         val updatedRows = clientDao.updateClient(entity)
         if (updatedRows == 0) {
             clientDao.insertClient(entity)
@@ -66,15 +65,15 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     override suspend fun archiveClient(clientId: String) {
-        clientDao.updateClientStatus(clientId, ClientStatus.REMOVED)
+        clientDao.updateClientStatus(clientId, ClientStatus.REMOVED, System.currentTimeMillis())
     }
 
     override suspend fun restoreClient(clientId: String) {
-        clientDao.updateClientStatus(clientId, ClientStatus.ACTIVE)
+        clientDao.updateClientStatus(clientId, ClientStatus.ACTIVE, System.currentTimeMillis())
     }
 
     override suspend fun deleteClient(clientId: String) {
-        clientDao.deleteClient(clientId)
+        clientDao.softDeleteClient(clientId, System.currentTimeMillis())
     }
 
     // --- Sessions ---
@@ -95,25 +94,16 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
-    /**
-     * Smart Save Logic: Uses diffing to avoid destroying links on every save.
-     */
     override suspend fun saveSession(session: Session) {
         db.withTransaction {
-            // 1. Update the Session Entity itself
-            // converting from domain updates lastSyncTimestamp
             sessionDao.insertSession(SessionEntity.fromDomain(session))
 
-            // 2. Fetch existing links from DB to compare against current session state
             val existingLinks = sessionDao.getLinksForSession(session.id)
             val existingLinkMap = existingLinks.associateBy { it.id }
-
             val currentLinks = mutableListOf<SessionExerciseEntity>()
 
             session.exercises.forEachIndexed { index, exercise ->
                 val formattedName = exercise.name.trim()
-
-                // 3. Find or Create the Exercise Template (Global Logic)
                 var template = sessionDao.findTemplateByName(session.clientId, formattedName)
 
                 if (template == null) {
@@ -129,7 +119,6 @@ class RaiRepositoryImpl @Inject constructor(
                     )
                     sessionDao.insertTemplate(template)
                 } else {
-                    // Update global template to reflect latest stats
                     val updatedTemplate = template.copy(
                         weight = exercise.weight,
                         sets = exercise.sets,
@@ -141,10 +130,8 @@ class RaiRepositoryImpl @Inject constructor(
                     template = updatedTemplate
                 }
 
-                // 4. Create the Link Object
                 val linkId =
                     if (exercise.id.length > 10) exercise.id else UUID.randomUUID().toString()
-
                 val link = SessionExerciseEntity(
                     id = linkId,
                     sessionId = session.id,
@@ -155,26 +142,17 @@ class RaiRepositoryImpl @Inject constructor(
                 currentLinks.add(link)
             }
 
-            // 5. Calculate Diffs
             val linksToDelete =
                 existingLinks.filter { old -> currentLinks.none { new -> new.id == old.id } }
             val linksToInsert = currentLinks.filter { new -> existingLinkMap[new.id] == null }
             val linksToUpdate = currentLinks.filter { new ->
                 val old = existingLinkMap[new.id]
-                // Only update if data actually changed to reduce write churn
                 old != null && old != new
             }
 
-            // 6. Apply Changes
-            if (linksToDelete.isNotEmpty()) {
-                sessionDao.deleteLinks(linksToDelete)
-            }
-            if (linksToInsert.isNotEmpty()) {
-                sessionDao.insertLinks(linksToInsert)
-            }
-            linksToUpdate.forEach {
-                sessionDao.updateLink(it)
-            }
+            if (linksToDelete.isNotEmpty()) sessionDao.deleteLinks(linksToDelete)
+            if (linksToInsert.isNotEmpty()) sessionDao.insertLinks(linksToInsert)
+            linksToUpdate.forEach { sessionDao.updateLink(it) }
         }
     }
 
@@ -185,7 +163,7 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteSession(sessionId: String) {
-        sessionDao.deleteSession(sessionId)
+        sessionDao.softDeleteSession(sessionId, System.currentTimeMillis())
     }
 
     // --- History ---
@@ -203,54 +181,38 @@ class RaiRepositoryImpl @Inject constructor(
         historyDao.insertLog(HistoryEntity.fromDomain(log))
     }
 
-    // --- SYNC (Cloud Push & Pull with Deltas) ---
+    // --- SYNC ---
 
     override suspend fun sync() {
-        val currentUser = firebaseAuth.currentUser
-        if (currentUser == null) return
-
+        val currentUser = firebaseAuth.currentUser ?: return
         val uid = currentUser.uid
         val userDocRef = firestore.collection("users").document(uid)
 
         try {
-            // 1. Get last successful sync time from Firestore
             val userMetaSnapshot = userDocRef.get().await()
             val lastSyncTime = userMetaSnapshot.getLong("lastSync") ?: 0L
             val currentTime = System.currentTimeMillis()
 
-            // --- 2. OPTIMIZED PUSH (Local -> Remote) ---
-            // Only push items modified AFTER the last sync
-
-            val localClients = clientDao.getAllClients().first()
-                .filter { it.lastSyncTimestamp > lastSyncTime }
-
-            // Access .session property because getAllSessions returns SessionPopulated
-            val localSessions = sessionDao.getAllSessions().first()
-                .filter { it.session.lastSyncTimestamp > lastSyncTime }
-
-            val localHistory = historyDao.getAllHistoryLogs().first()
+            // PUSH
+            val changedClients = clientDao.getClientsForSync(lastSyncTime)
+            val changedSessions = sessionDao.getSessionsForSync(lastSyncTime)
+            val changedHistory = historyDao.getAllHistoryLogs().first()
                 .filter { it.lastSyncTimestamp > lastSyncTime }
 
             val batch = firestore.batch()
             var hasChanges = false
 
-            localClients.forEach {
+            changedClients.forEach {
                 batch.set(userDocRef.collection("clients").document(it.id), it, SetOptions.merge())
                 hasChanges = true
             }
 
-            localSessions.forEach { populatedSession ->
-                // Flatten Session Structure for Cloud
-                val domainSession = populatedSession.toDomain()
-                batch.set(
-                    userDocRef.collection("sessions").document(domainSession.id),
-                    domainSession,
-                    SetOptions.merge()
-                )
+            changedSessions.forEach {
+                batch.set(userDocRef.collection("sessions").document(it.id), it, SetOptions.merge())
                 hasChanges = true
             }
 
-            localHistory.forEach {
+            changedHistory.forEach {
                 batch.set(userDocRef.collection("history").document(it.id), it, SetOptions.merge())
                 hasChanges = true
             }
@@ -259,9 +221,7 @@ class RaiRepositoryImpl @Inject constructor(
                 batch.commit().await()
             }
 
-            // --- 3. OPTIMIZED PULL (Remote -> Local) ---
-            // Only fetch remote items modified AFTER the last sync
-
+            // PULL
             val remoteClientsSnapshot = userDocRef.collection("clients")
                 .whereGreaterThan("lastSyncTimestamp", lastSyncTime).get().await()
 
@@ -272,35 +232,28 @@ class RaiRepositoryImpl @Inject constructor(
                 .whereGreaterThan("lastSyncTimestamp", lastSyncTime).get().await()
 
             db.withTransaction {
-                // A. Sync Clients
                 val remoteClients = remoteClientsSnapshot.toObjects(ClientEntity::class.java)
-                if (remoteClients.isNotEmpty()) {
-                    clientDao.insertClients(remoteClients)
-                }
+                if (remoteClients.isNotEmpty()) clientDao.insertClients(remoteClients)
 
-                // B. Sync History
                 val remoteHistory = remoteHistorySnapshot.toObjects(HistoryEntity::class.java)
-                if (remoteHistory.isNotEmpty()) {
-                    historyDao.insertLogs(remoteHistory)
-                }
+                if (remoteHistory.isNotEmpty()) historyDao.insertLogs(remoteHistory)
 
-                // C. Sync Sessions
-                // Reconstruct relational structure via saveSession
                 for (doc in remoteSessionsSnapshot.documents) {
-                    val remoteSession = doc.toObject(Session::class.java)
-                    if (remoteSession != null) {
-                        saveSession(remoteSession)
+                    val isDeleted = doc.getBoolean("isDeleted") ?: false
+                    if (isDeleted) {
+                        val entity = doc.toObject(SessionEntity::class.java)
+                        if (entity != null) sessionDao.insertSession(entity)
+                    } else {
+                        val domainSession = doc.toObject(Session::class.java)
+                        if (domainSession != null) saveSession(domainSession)
                     }
                 }
             }
 
-            // 4. Update timestamp for next sync
             userDocRef.set(mapOf("lastSync" to currentTime), SetOptions.merge())
 
         } catch (e: Exception) {
             e.printStackTrace()
-            // In production, report this to Crashlytics
         }
     }
-
 }
