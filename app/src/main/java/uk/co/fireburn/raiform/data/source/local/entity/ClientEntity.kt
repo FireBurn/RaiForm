@@ -14,7 +14,8 @@ data class ClientEntity(
     val notes: String,
     val dateAdded: Long,
     val weeklyResetDay: Int,
-    val lastSyncTimestamp: Long = 0L // To track sync status
+    val lastSyncTimestamp: Long = 0L,
+    val isDeleted: Boolean = false
 ) {
     fun toDomain() = Client(
         id = id,
@@ -33,7 +34,8 @@ data class ClientEntity(
             notes = client.notes,
             dateAdded = client.dateAdded,
             weeklyResetDay = client.weeklyResetDay,
-            lastSyncTimestamp = System.currentTimeMillis()
+            lastSyncTimestamp = System.currentTimeMillis(),
+            isDeleted = false // Default active when converting from domain
         )
     }
 }

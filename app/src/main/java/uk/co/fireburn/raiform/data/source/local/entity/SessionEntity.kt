@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 
 @Entity(
@@ -29,9 +30,10 @@ data class SessionEntity(
     val lastResetTimestamp: Long,
     val isSkippedThisWeek: Boolean,
     val tempRescheduleTimestamp: Long?,
-    val lastSyncTimestamp: Long = 0L
+    val lastSyncTimestamp: Long = 0L,
+    val isDeleted: Boolean = false
 ) {
-    fun toDomain(exercises: List<uk.co.fireburn.raiform.domain.model.Exercise>) = Session(
+    fun toDomain(exercises: List<Exercise>) = Session(
         id = id,
         clientId = clientId,
         name = name,
@@ -50,14 +52,14 @@ data class SessionEntity(
                 id = session.id,
                 clientId = session.clientId,
                 name = session.name,
-                // exercises are saved separately now
                 scheduledDay = session.scheduledDay,
                 scheduledHour = session.scheduledHour,
                 scheduledMinute = session.scheduledMinute,
                 lastResetTimestamp = session.lastResetTimestamp,
                 isSkippedThisWeek = session.isSkippedThisWeek,
                 tempRescheduleTimestamp = session.tempRescheduleTimestamp,
-                lastSyncTimestamp = System.currentTimeMillis()
+                lastSyncTimestamp = System.currentTimeMillis(),
+                isDeleted = false
             )
     }
 }
