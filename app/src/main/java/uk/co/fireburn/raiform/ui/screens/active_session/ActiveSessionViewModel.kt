@@ -18,7 +18,6 @@ import uk.co.fireburn.raiform.domain.repository.RaiRepository
 import uk.co.fireburn.raiform.domain.usecase.ManageSessionUseCase
 import javax.inject.Inject
 
-// Add Event Sealed Class
 sealed class ActiveSessionEvent {
     object TimerFinished : ActiveSessionEvent()
 }
@@ -27,6 +26,7 @@ data class ActiveSessionUiState(
     val session: Session? = null,
     val isLoading: Boolean = true,
     val timerValue: Int = 60,
+    val timerTotalTime: Int = 60, // Added to calculate progress percentage
     val isTimerRunning: Boolean = false
 )
 
@@ -43,7 +43,6 @@ class ActiveSessionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ActiveSessionUiState())
     val uiState: StateFlow<ActiveSessionUiState> = _uiState.asStateFlow()
 
-    // Add Channel for Events
     private val _events = Channel<ActiveSessionEvent>()
     val events = _events.receiveAsFlow()
 
@@ -56,7 +55,6 @@ class ActiveSessionViewModel @Inject constructor(
     private fun loadSession() {
         viewModelScope.launch {
             repository.getSession(sessionId).collect { session ->
-                // Sort exercises alphabetically by name
                 val sortedSession = session?.copy(
                     exercises = session.exercises.sortedBy { it.name }
                 )
@@ -67,33 +65,32 @@ class ActiveSessionViewModel @Inject constructor(
 
     // --- Timer Logic ---
 
-    fun toggleRestTimer() {
-        if (_uiState.value.isTimerRunning) {
-            stopTimer()
-        } else {
-            startTimer()
-        }
-    }
-
-    private fun startTimer() {
+    fun startTimer(seconds: Int) {
+        // Stop any existing timer first
         timerJob?.cancel()
+
         timerJob = viewModelScope.launch {
-            _uiState.update { it.copy(isTimerRunning = true, timerValue = 60) }
+            _uiState.update {
+                it.copy(
+                    isTimerRunning = true,
+                    timerValue = seconds,
+                    timerTotalTime = seconds
+                )
+            }
 
             while (_uiState.value.timerValue > 0) {
                 delay(1000L)
                 _uiState.update { it.copy(timerValue = it.timerValue - 1) }
             }
 
-            // Timer finished!
             _events.send(ActiveSessionEvent.TimerFinished)
             stopTimer()
         }
     }
 
-    private fun stopTimer() {
+    fun stopTimer() {
         timerJob?.cancel()
-        _uiState.update { it.copy(isTimerRunning = false, timerValue = 60) }
+        _uiState.update { it.copy(isTimerRunning = false) }
     }
 
     // --- Existing Logic ---
@@ -111,8 +108,6 @@ class ActiveSessionViewModel @Inject constructor(
             manageSessionUseCase.toggleMaintainWeight(clientId, currentSession, exerciseId)
         }
     }
-
-    // reorderExercises function removed as requested
 
     fun addExercise(name: String, weight: Double, isBodyweight: Boolean, sets: Int, reps: Int) {
         val currentSession = _uiState.value.session ?: return

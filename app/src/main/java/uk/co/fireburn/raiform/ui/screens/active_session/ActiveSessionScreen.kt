@@ -1,20 +1,24 @@
 package uk.co.fireburn.raiform.ui.screens.active_session
 
 import android.content.Context
-import android.media.AudioManager
-import android.media.ToneGenerator
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.widget.Toast
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,12 +32,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,7 +50,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -56,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,12 +91,25 @@ fun ActiveSessionScreen(
     val session = state.session
     val context = LocalContext.current
 
-    // Listen for Timer Finished Event
+    // State to hold the active ringtone so we can stop it later
+    var activeRingtone by remember { mutableStateOf<Ringtone?>(null) }
+    var isAlarmRinging by remember { mutableStateOf(false) }
+
+    // Cleanup ringtone if user leaves screen
+    DisposableEffect(Unit) {
+        onDispose {
+            activeRingtone?.stop()
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is ActiveSessionEvent.TimerFinished -> {
-                    triggerAlert(context)
+                    // Play sound and vibrate
+                    activeRingtone = playAlarmSound(context)
+                    vibratePhone(context)
+                    isAlarmRinging = true
                 }
             }
         }
@@ -138,16 +156,29 @@ fun ActiveSessionScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Rest Timer Header
+                // 1. Rest Timer Header (Modified)
                 item {
                     RestTimerHeader(
                         isRunning = state.isTimerRunning,
+                        isAlarmRinging = isAlarmRinging,
                         timeLeft = state.timerValue,
-                        onToggle = { viewModel.toggleRestTimer() }
+                        totalTime = state.timerTotalTime,
+                        onStart = {
+                            // Ensure previous alarm is stopped before starting new
+                            activeRingtone?.stop()
+                            isAlarmRinging = false
+                            viewModel.startTimer(it)
+                        },
+                        onStop = {
+                            // Stop Timer Logic
+                            viewModel.stopTimer()
+                            activeRingtone?.stop()
+                            isAlarmRinging = false
+                        }
                     )
                 }
 
-                // 2. List of Exercises (Alphabetically sorted in ViewModel)
+                // 2. List of Exercises
                 items(session.exercises, key = { it.id }) { exercise ->
                     ActiveExerciseCard(
                         exercise = exercise,
@@ -215,88 +246,148 @@ fun ActiveSessionScreen(
     }
 }
 
-// Function to handle sound and vibration
-private fun triggerAlert(context: Context) {
-    try {
-        // 1. Play Sound (Beep)
-        val toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
-
-        // 2. Vibrate
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager =
-                context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+private fun playAlarmSound(context: Context): Ringtone? {
+    return try {
+        val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val r = RingtoneManager.getRingtone(context, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            r.isLooping = true // Loop until stopped
         }
-
-
-        vibrator.vibrate(
-            VibrationEffect.createOneShot(
-                500,
-                VibrationEffect.DEFAULT_AMPLITUDE
-            )
-        )
-
-        // 3. Visual Feedback
-        Toast.makeText(context, "Rest Finished! Go!", Toast.LENGTH_SHORT).show()
+        r.play()
+        r
     } catch (e: Exception) {
         e.printStackTrace()
+        null
     }
+}
+
+private fun vibratePhone(context: Context) {
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val vibratorManager =
+            context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        vibratorManager.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    // Vibrate for 1 second
+    vibrator.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
 }
 
 @Composable
 fun RestTimerHeader(
     isRunning: Boolean,
+    isAlarmRinging: Boolean,
     timeLeft: Int,
-    onToggle: () -> Unit
+    totalTime: Int,
+    onStart: (Int) -> Unit,
+    onStop: () -> Unit
 ) {
-    val progress by animateFloatAsState(
-        targetValue = if (isRunning) timeLeft / 60f else 1f,
-        label = "TimerProgress"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clickable { onToggle() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isRunning) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (isRunning) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    trackColor = Color.Transparent,
-                )
-            }
-
+    if (isAlarmRinging) {
+        // --- ALARM RINGING STATE ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clickable { onStop() }, // Click anywhere to stop
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
+            shape = MaterialTheme.shapes.medium
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Timer,
+                    Icons.Default.NotificationsActive,
                     contentDescription = null,
-                    tint = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimaryContainer
+                    tint = MaterialTheme.colorScheme.onError,
+                    modifier = Modifier.size(32.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(16.dp))
                 Text(
-                    text = if (isRunning) "Resting... ${timeLeft}s" else "Start Rest Timer (60s)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimaryContainer
+                    text = "STOP ALARM",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onError
                 )
+            }
+        }
+    } else if (isRunning) {
+        // --- COUNTDOWN STATE ---
+        val progressFraction by animateFloatAsState(
+            targetValue = if (totalTime > 0) timeLeft.toFloat() / totalTime.toFloat() else 0f,
+            label = "TimerProgress",
+            animationSpec = tween(durationMillis = 1000, easing = LinearEasing)
+        )
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clickable { onStop() },
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Background Fill Animation
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = progressFraction)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        .align(Alignment.CenterStart)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "${timeLeft}s",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Icon(Icons.Default.Stop, null, tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    } else {
+        // --- IDLE STATE (Two Buttons) ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Button(
+                onClick = { onStart(60) },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
+                Text("1 MIN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            Button(
+                onClick = { onStart(120) },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
+                Text("2 MINS", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     }
@@ -458,7 +549,7 @@ fun ExerciseDialog(
                                 onClick = { weightModifier = 1 },
                                 label = { Text("Weighted (+)") },
                                 leadingIcon = if (weightModifier == 1) {
-                                    { Icon(Icons.Default.Check, null) }
+                                    { Icon(Icons.Default.Done, null) }
                                 } else null
                             )
                             FilterChip(
@@ -466,7 +557,7 @@ fun ExerciseDialog(
                                 onClick = { weightModifier = -1 },
                                 label = { Text("Assisted (-)") },
                                 leadingIcon = if (weightModifier == -1) {
-                                    { Icon(Icons.Default.Check, null) }
+                                    { Icon(Icons.Default.Done, null) }
                                 } else null,
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
