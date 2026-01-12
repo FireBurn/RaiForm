@@ -26,7 +26,7 @@ data class ActiveSessionUiState(
     val session: Session? = null,
     val isLoading: Boolean = true,
     val timerValue: Int = 60,
-    val timerTotalTime: Int = 60, // Added to calculate progress percentage
+    val timerTotalTime: Int = 60,
     val isTimerRunning: Boolean = false
 )
 
@@ -69,22 +69,31 @@ class ActiveSessionViewModel @Inject constructor(
         // Stop any existing timer first
         timerJob?.cancel()
 
+        _uiState.update {
+            it.copy(
+                isTimerRunning = true,
+                timerValue = seconds,
+                timerTotalTime = seconds
+            )
+        }
+
         timerJob = viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isTimerRunning = true,
-                    timerValue = seconds,
-                    timerTotalTime = seconds
-                )
-            }
+            val endTime = System.currentTimeMillis() + (seconds * 1000L)
 
-            while (_uiState.value.timerValue > 0) {
-                delay(1000L)
-                _uiState.update { it.copy(timerValue = it.timerValue - 1) }
-            }
+            while (true) {
+                val currentTime = System.currentTimeMillis()
+                val remainingMillis = endTime - currentTime
+                val remainingSeconds = (remainingMillis / 1000).toInt()
 
-            _events.send(ActiveSessionEvent.TimerFinished)
-            stopTimer()
+                if (remainingSeconds <= 0) {
+                    _uiState.update { it.copy(timerValue = 0, isTimerRunning = false) }
+                    _events.send(ActiveSessionEvent.TimerFinished)
+                    break
+                }
+
+                _uiState.update { it.copy(timerValue = remainingSeconds) }
+                delay(200) // Update UI 5 times a second for smoothness, but logic relies on system time
+            }
         }
     }
 
