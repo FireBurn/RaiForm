@@ -23,14 +23,19 @@ import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.AndroidEntryPoint
 import uk.co.fireburn.raiform.ui.navigation.ActiveSession
 import uk.co.fireburn.raiform.ui.navigation.AppNavigation
 import uk.co.fireburn.raiform.ui.navigation.Scheduler
 import uk.co.fireburn.raiform.ui.theme.RaiFormTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var auth: FirebaseAuth
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -43,6 +48,19 @@ class MainActivity : ComponentActivity() {
 
         // Fix for modern Android edge-to-edge requirement
         enableEdgeToEdge()
+
+        // --- AUTHENTICATION CHECK ---
+        // Ensure the user has a UID so SyncWorker can write to Firestore/users/{uid}
+        if (auth.currentUser == null) {
+            auth.signInAnonymously()
+                .addOnSuccessListener {
+                    // Auth successful, Sync will work on next trigger
+                }
+                .addOnFailureListener { e ->
+                    e.printStackTrace()
+                }
+        }
+        // ----------------------------
 
         createNotificationChannel()
         checkPermissions()
