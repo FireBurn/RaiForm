@@ -4,18 +4,15 @@ import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 
 class ManageSessionUseCase @Inject constructor(
     private val repository: RaiRepository
 ) {
-
-    // --- Session Management ---
-
     suspend fun createSession(clientId: String, name: String) {
         if (name.isBlank()) return
-        val newSession =
-            Session(clientId = clientId, name = name.toTitleCase())
+        val newSession = Session(clientId = clientId, name = name.toTitleCase())
         repository.saveSession(newSession)
     }
 
@@ -49,7 +46,7 @@ class ManageSessionUseCase @Inject constructor(
             scheduledDay = day,
             scheduledHour = hour,
             scheduledMinute = minute,
-            isSkippedThisWeek = false // Re-enable if it was skipped
+            isSkippedThisWeek = false
         )
         repository.saveSession(updated)
     }
@@ -66,6 +63,7 @@ class ManageSessionUseCase @Inject constructor(
         reps: Int
     ) {
         val newExercise = Exercise(
+            id = UUID.randomUUID().toString(),
             name = name.toTitleCase(),
             weight = weight,
             isBodyweight = isBodyweight,
@@ -121,11 +119,6 @@ class ManageSessionUseCase @Inject constructor(
     suspend fun deleteExercise(clientId: String, session: Session, exerciseId: String) {
         val updatedExercises = session.exercises.filter { it.id != exerciseId }
         val updatedSession = session.copy(exercises = updatedExercises)
-        repository.saveSession(updatedSession)
-    }
-
-    suspend fun reorderExercises(clientId: String, session: Session, newOrder: List<Exercise>) {
-        val updatedSession = session.copy(exercises = newOrder)
         repository.saveSession(updatedSession)
     }
 

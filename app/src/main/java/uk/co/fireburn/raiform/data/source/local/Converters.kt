@@ -24,8 +24,7 @@ class Converters {
         }
     }
 
-    // --- List<Exercise> (JSON) ---
-
+    // --- List<Exercise> (JSON) for History ---
     @TypeConverter
     fun fromExerciseList(exercises: List<Exercise>?): String {
         if (exercises == null) return "[]"

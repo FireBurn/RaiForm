@@ -7,16 +7,21 @@ import uk.co.fireburn.raiform.data.source.local.dao.ClientDao
 import uk.co.fireburn.raiform.data.source.local.dao.HistoryDao
 import uk.co.fireburn.raiform.data.source.local.dao.SessionDao
 import uk.co.fireburn.raiform.data.source.local.entity.ClientEntity
+import uk.co.fireburn.raiform.data.source.local.entity.ExerciseTemplateEntity
 import uk.co.fireburn.raiform.data.source.local.entity.HistoryEntity
 import uk.co.fireburn.raiform.data.source.local.entity.SessionEntity
+import uk.co.fireburn.raiform.data.source.local.entity.SessionExerciseEntity
 
 @Database(
     entities = [
         ClientEntity::class,
         SessionEntity::class,
-        HistoryEntity::class
+        HistoryEntity::class,
+        // New Entities:
+        ExerciseTemplateEntity::class,
+        SessionExerciseEntity::class
     ],
-    version = 1,
+    version = 2, // Incremented version
     exportSchema = false
 )
 @TypeConverters(Converters::class)

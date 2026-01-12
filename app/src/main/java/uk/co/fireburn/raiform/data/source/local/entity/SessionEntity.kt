@@ -4,7 +4,6 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 
 @Entity(
@@ -22,9 +21,8 @@ import uk.co.fireburn.raiform.domain.model.Session
 data class SessionEntity(
     @PrimaryKey
     val id: String,
-    val clientId: String, // Foreign Key linking to Client
+    val clientId: String,
     val name: String,
-    val exercises: List<Exercise>, // Handled by TypeConverter
     val scheduledDay: Int?,
     val scheduledHour: Int?,
     val scheduledMinute: Int?,
@@ -33,9 +31,9 @@ data class SessionEntity(
     val tempRescheduleTimestamp: Long?,
     val lastSyncTimestamp: Long = 0L
 ) {
-    fun toDomain() = Session(
+    fun toDomain(exercises: List<uk.co.fireburn.raiform.domain.model.Exercise>) = Session(
         id = id,
-        clientId = clientId, // Pass clientId here
+        clientId = clientId,
         name = name,
         exercises = exercises,
         scheduledDay = scheduledDay,
@@ -48,11 +46,11 @@ data class SessionEntity(
 
     companion object {
         fun fromDomain(session: Session) =
-            SessionEntity( // Removed clientId param, now comes from session
+            SessionEntity(
                 id = session.id,
-                clientId = session.clientId, // Get clientId from session
+                clientId = session.clientId,
                 name = session.name,
-                exercises = session.exercises,
+                // exercises are saved separately now
                 scheduledDay = session.scheduledDay,
                 scheduledHour = session.scheduledHour,
                 scheduledMinute = session.scheduledMinute,
