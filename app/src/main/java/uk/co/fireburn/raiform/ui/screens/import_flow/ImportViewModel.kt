@@ -18,7 +18,7 @@ data class ImportUiState(
     val parsedSessions: List<Session> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isSaved: Boolean = false // Trigger navigation back on true
+    val isSaved: Boolean = false
 )
 
 @HiltViewModel
@@ -40,21 +40,9 @@ class ImportViewModel @Inject constructor(
             return
         }
 
-        // We run a "dry run" of the parsing logic here to preview.
-        // Since the UseCase saves to DB immediately, for the preview UI we might need to expose
-        // the Parser directly or have a "Preview" UseCase.
-        // However, sticking to the requested architecture and previous implementation logic:
-        // The previous VM used `LegacyParser` directly.
-        // To be clean, we should probably use the Parser utility here for preview,
-        // and the UseCase for saving.
-        // *Correction*: To keep Domain pure, the Parser should ideally be internal or injected.
-        // For this specific UI flow (Preview -> Save), let's use the Parser utility directly here
-        // as strictly presentation logic (formatting text for display),
-        // then call the UseCase to commit.
-
         try {
-            // Using the util class directly as it's a pure function
-            val result = uk.co.fireburn.raiform.util.LegacyParser.parseLegacyNote(text)
+            // Use the UseCase for preview logic
+            val result = importLegacyNoteUseCase.preview(text)
             _uiState.update {
                 it.copy(
                     parsedClientName = result.clientName,
@@ -74,8 +62,6 @@ class ImportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            // The UseCase re-parses and saves.
-            // This ensures the source of truth for "Saving" logic remains in the domain layer.
             val result = importLegacyNoteUseCase(text)
 
             result.onSuccess {

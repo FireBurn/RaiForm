@@ -10,8 +10,15 @@ class ImportLegacyNoteUseCase @Inject constructor(
 ) {
 
     /**
-     * Parses a raw text note (e.g. from Google Keep) and creates a full Client + Session structure.
-     * Returns the ID of the newly created Client on success.
+     * Preview: Parses text without saving to Database.
+     * Used for UI feedback before the user commits.
+     */
+    fun preview(rawText: String): LegacyParser.ParseResult {
+        return LegacyParser.parseLegacyNote(rawText)
+    }
+
+    /**
+     * Commit: Parses and saves to Database.
      */
     suspend operator fun invoke(rawText: String): Result<String> {
         return try {
@@ -25,8 +32,6 @@ class ImportLegacyNoteUseCase @Inject constructor(
             repository.saveClient(newClient)
 
             // 4. Save all sessions associated with this client
-            // We iterate and save individually or via batch if repository supported it
-            // The parser generates ephemeral IDs, but they are UUIDs so we can use them directly
             parseResult.sessions.forEach { session ->
                 repository.saveSession(session.copy(clientId = newClient.id))
             }
