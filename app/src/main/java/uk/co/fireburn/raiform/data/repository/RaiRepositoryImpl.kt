@@ -96,11 +96,12 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Updated Save Logic: Uses diffing to avoid destroying links on every save.
+     * Smart Save Logic: Uses diffing to avoid destroying links on every save.
      */
     override suspend fun saveSession(session: Session) {
         db.withTransaction {
             // 1. Update the Session Entity itself
+            // converting from domain updates lastSyncTimestamp
             sessionDao.insertSession(SessionEntity.fromDomain(session))
 
             // 2. Fetch existing links from DB to compare against current session state
@@ -141,7 +142,6 @@ class RaiRepositoryImpl @Inject constructor(
                 }
 
                 // 4. Create the Link Object
-                // If exercise.id is temporary/short (from UI creation), generate a UUID.
                 val linkId =
                     if (exercise.id.length > 10) exercise.id else UUID.randomUUID().toString()
 
@@ -203,7 +203,7 @@ class RaiRepositoryImpl @Inject constructor(
         historyDao.insertLog(HistoryEntity.fromDomain(log))
     }
 
-    // --- SYNC (Cloud Push & Pull) ---
+    // --- SYNC (Cloud Push & Pull with Deltas) ---
 
     override suspend fun sync() {
         val currentUser = firebaseAuth.currentUser
@@ -213,42 +213,63 @@ class RaiRepositoryImpl @Inject constructor(
         val userDocRef = firestore.collection("users").document(uid)
 
         try {
-            // --- 1. PUSH (Local -> Remote) ---
+            // 1. Get last successful sync time from Firestore
+            val userMetaSnapshot = userDocRef.get().await()
+            val lastSyncTime = userMetaSnapshot.getLong("lastSync") ?: 0L
+            val currentTime = System.currentTimeMillis()
+
+            // --- 2. OPTIMIZED PUSH (Local -> Remote) ---
+            // Only push items modified AFTER the last sync
+
             val localClients = clientDao.getAllClients().first()
+                .filter { it.lastSyncTimestamp > lastSyncTime }
+
+            // Access .session property because getAllSessions returns SessionPopulated
             val localSessions = sessionDao.getAllSessions().first()
+                .filter { it.session.lastSyncTimestamp > lastSyncTime }
+
             val localHistory = historyDao.getAllHistoryLogs().first()
+                .filter { it.lastSyncTimestamp > lastSyncTime }
 
             val batch = firestore.batch()
+            var hasChanges = false
 
-            // Push Clients
             localClients.forEach {
                 batch.set(userDocRef.collection("clients").document(it.id), it, SetOptions.merge())
+                hasChanges = true
             }
 
-            // Push Sessions
-            // We convert to Domain first to ensure we send the full nested structure (exercises list)
-            // This is critical for NoSQL storage so we don't have to join 3 tables on the server.
             localSessions.forEach { populatedSession ->
+                // Flatten Session Structure for Cloud
                 val domainSession = populatedSession.toDomain()
                 batch.set(
                     userDocRef.collection("sessions").document(domainSession.id),
                     domainSession,
                     SetOptions.merge()
                 )
+                hasChanges = true
             }
 
-            // Push History
             localHistory.forEach {
                 batch.set(userDocRef.collection("history").document(it.id), it, SetOptions.merge())
+                hasChanges = true
             }
 
-            // Commit Push
-            batch.commit().await()
+            if (hasChanges) {
+                batch.commit().await()
+            }
 
-            // --- 2. PULL (Remote -> Local) ---
-            val remoteClientsSnapshot = userDocRef.collection("clients").get().await()
-            val remoteSessionsSnapshot = userDocRef.collection("sessions").get().await()
-            val remoteHistorySnapshot = userDocRef.collection("history").get().await()
+            // --- 3. OPTIMIZED PULL (Remote -> Local) ---
+            // Only fetch remote items modified AFTER the last sync
+
+            val remoteClientsSnapshot = userDocRef.collection("clients")
+                .whereGreaterThan("lastSyncTimestamp", lastSyncTime).get().await()
+
+            val remoteSessionsSnapshot = userDocRef.collection("sessions")
+                .whereGreaterThan("lastSyncTimestamp", lastSyncTime).get().await()
+
+            val remoteHistorySnapshot = userDocRef.collection("history")
+                .whereGreaterThan("lastSyncTimestamp", lastSyncTime).get().await()
 
             db.withTransaction {
                 // A. Sync Clients
@@ -264,8 +285,7 @@ class RaiRepositoryImpl @Inject constructor(
                 }
 
                 // C. Sync Sessions
-                // Iterate through remote documents, convert to Domain, then save locally.
-                // Using saveSession() ensures the relational tables (Templates/Links) are reconstructed correctly.
+                // Reconstruct relational structure via saveSession
                 for (doc in remoteSessionsSnapshot.documents) {
                     val remoteSession = doc.toObject(Session::class.java)
                     if (remoteSession != null) {
@@ -274,13 +294,13 @@ class RaiRepositoryImpl @Inject constructor(
                 }
             }
 
-            // Update timestamp
-            userDocRef.set(mapOf("lastSync" to System.currentTimeMillis()), SetOptions.merge())
+            // 4. Update timestamp for next sync
+            userDocRef.set(mapOf("lastSync" to currentTime), SetOptions.merge())
 
         } catch (e: Exception) {
             e.printStackTrace()
-            // In a real application, you might inject an ErrorHandler or EventBus here
-            // to notify the UI or analytics about sync failures.
+            // In production, report this to Crashlytics
         }
     }
+
 }
