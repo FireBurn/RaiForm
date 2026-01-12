@@ -19,7 +19,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 
 @Singleton
 class SettingsRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : SettingsRepository {
 
     private val SCHEDULING_DAY_KEY = intPreferencesKey("scheduling_day")

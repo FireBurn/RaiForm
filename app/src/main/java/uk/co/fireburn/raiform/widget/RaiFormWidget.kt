@@ -47,6 +47,7 @@ import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
 import uk.co.fireburn.raiform.domain.repository.SettingsRepository
 import java.time.LocalDateTime
+import java.util.Locale
 
 class RaiFormWidget : GlanceAppWidget() {
 
@@ -305,6 +306,12 @@ class RaiFormWidget : GlanceAppWidget() {
     private fun formatTime(hour: Int, minute: Int): String {
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
-        return if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
+        return if (minute == 0) "$h$amPm" else String.format(
+            Locale.getDefault(),
+            "%d:%02d%s",
+            h,
+            minute,
+            amPm
+        )
     }
 }

@@ -59,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -231,17 +232,13 @@ private fun triggerAlert(context: Context) {
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(
-                VibrationEffect.createOneShot(
-                    500,
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                )
+
+        vibrator.vibrate(
+            VibrationEffect.createOneShot(
+                500,
+                VibrationEffect.DEFAULT_AMPLITUDE
             )
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(500)
-        }
+        )
 
         // 3. Visual Feedback
         Toast.makeText(context, "Rest Finished! Go!", Toast.LENGTH_SHORT).show()
@@ -411,7 +408,7 @@ fun ExerciseDialog(
     var nameText by remember { mutableStateOf(exercise.name) }
     // Use formatWeight for initial display
     var weightText by remember { mutableStateOf(formatWeight(abs(exercise.weight))) }
-    var weightModifier by remember { mutableStateOf(if (exercise.weight >= 0) 1 else -1) }
+    var weightModifier by remember { mutableIntStateOf(if (exercise.weight >= 0) 1 else -1) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
     var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }

@@ -70,7 +70,7 @@ class GetDashboardDataUseCase @Inject constructor(
             val nextSessionData = getNextSessionDate(sessions, now)
 
             if (nextSessionData != null) {
-                val (session, date) = nextSessionData
+                val (_, date) = nextSessionData
                 val formatted = formatSessionTime(date, now)
                 val displayString = if (sessions.isNotEmpty()) formatted else "Active"
                 scheduleMap[client.id] = displayString
@@ -141,7 +141,7 @@ class GetDashboardDataUseCase @Inject constructor(
         }
 
         return if (bestSession != null && bestDate != null) {
-            bestSession!! to bestDate!!
+            bestSession to bestDate
         } else null
     }
 
@@ -152,7 +152,14 @@ class GetDashboardDataUseCase @Inject constructor(
         val minute = date.minute
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
-        val timeStr = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
+
+        val timeStr = if (minute == 0) "$h$amPm" else String.format(
+            Locale.getDefault(),
+            "%d:%02d%s",
+            h,
+            minute,
+            amPm
+        )
 
         return when {
             dayDiff == 0L -> "Today @ $timeStr"

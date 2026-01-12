@@ -14,7 +14,7 @@ import java.time.temporal.TemporalAdjusters
 import javax.inject.Inject
 
 class AlarmScheduler @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 

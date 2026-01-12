@@ -335,7 +335,13 @@ fun SessionCard(
         val amPm = if (hour >= 12) "pm" else "am"
         val h = if (hour > 12) hour - 12 else if (hour == 0) 12 else hour
 
-        val time = if (minute == 0) "$h$amPm" else String.format("%d:%02d%s", h, minute, amPm)
+        val time = if (minute == 0) "$h$amPm" else String.format(
+            Locale.getDefault(),
+            "%d:%02d%s",
+            h,
+            minute,
+            amPm
+        )
         "$day @ $time"
     } else {
         "Unscheduled"
