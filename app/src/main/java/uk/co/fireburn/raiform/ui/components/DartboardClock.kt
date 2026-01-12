@@ -93,10 +93,8 @@ fun DartboardClock(
                             rawHour
                         }
 
-                        // Allow selection only if not taken
-                        if (!takenHours.contains(finalHour)) {
-                            onHourSelected(finalHour)
-                        }
+                        // Allow selection even if taken (to enable conflict resolution/overwriting)
+                        onHourSelected(finalHour)
                     }
                 }
         ) {
@@ -115,6 +113,8 @@ fun DartboardClock(
                 val isPMTaken = takenHours.contains(pmHour)
                 val isPMSelected = selectedHour == pmHour
 
+                // If selected, it takes priority color (Primary).
+                // If taken but not selected, it shows Error (Red).
                 val pmColor = when {
                     isPMSelected -> primaryColor
                     isPMTaken -> errorColor.copy(alpha = 0.6f)

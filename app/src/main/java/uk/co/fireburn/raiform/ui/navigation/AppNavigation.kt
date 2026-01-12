@@ -14,13 +14,13 @@ import uk.co.fireburn.raiform.ui.screens.scheduler.MainSchedulerScreen
 import uk.co.fireburn.raiform.ui.screens.settings.SettingsScreen
 import uk.co.fireburn.raiform.ui.screens.stats.ClientStatsScreen
 
-// --- Route Definitions (Type-Safe) ---
-
+// --- Route Definitions ---
 @Serializable
 object Dashboard
 
+// Update: Added rescheduleSessionId to allow deep-linking into a reschedule dialog
 @Serializable
-data class ClientDetails(val clientId: String)
+data class ClientDetails(val clientId: String, val rescheduleSessionId: String? = null)
 
 @Serializable
 data class ActiveSession(val clientId: String, val sessionId: String)
@@ -40,9 +40,6 @@ object Settings
 @Serializable
 object ArchivedClients
 
-
-// --- Navigation Host ---
-
 @Composable
 fun AppNavigation(
     navController: NavHostController
@@ -56,25 +53,14 @@ fun AppNavigation(
                 onNavigateToClientDetails = { clientId ->
                     navController.navigate(ClientDetails(clientId))
                 },
-                onNavigateToScheduler = {
-                    navController.navigate(Scheduler)
-                },
-                onNavigateToImport = {
-                    navController.navigate(Import)
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Settings)
-                },
-                onNavigateToArchived = {
-                    navController.navigate(ArchivedClients)
-                }
+                onNavigateToScheduler = { navController.navigate(Scheduler) },
+                onNavigateToImport = { navController.navigate(Import) },
+                onNavigateToSettings = { navController.navigate(Settings) },
+                onNavigateToArchived = { navController.navigate(ArchivedClients) }
             )
         }
 
-        composable<ClientDetails> { backStackEntry ->
-            // Type-safe arguments are automatically handled by Hilt via SavedStateHandle
-            // inside the ViewModel, but can also be accessed here if needed:
-            // val route: ClientDetails = backStackEntry.toRoute()
+        composable<ClientDetails> {
             ClientDetailsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSession = { clientId, sessionId ->
@@ -82,6 +68,10 @@ fun AppNavigation(
                 },
                 onNavigateToStats = { clientId ->
                     navController.navigate(Stats(clientId))
+                },
+                // Update: Pass both IDs to navigation
+                onNavigateToClient = { clientId, sessionId ->
+                    navController.navigate(ClientDetails(clientId, sessionId))
                 }
             )
         }

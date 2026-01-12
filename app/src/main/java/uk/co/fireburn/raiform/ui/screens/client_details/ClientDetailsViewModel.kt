@@ -4,8 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -22,23 +25,40 @@ data class ClientDetailsUiState(
     val client: Client? = null,
     val sessions: List<Session> = emptyList(),
     val globalOccupiedSlots: Map<Int, List<Int>> = emptyMap(),
+    val allGlobalSessions: List<Session> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null
 )
 
+sealed class ClientDetailsEvent {
+    data class ShowConflictDialog(
+        val conflictName: String,
+        val conflictingSession: Session,
+        val targetDay: Int,
+        val targetHour: Int,
+        val sessionToSchedule: Session
+    ) : ClientDetailsEvent()
+
+    data class ShowMessage(val message: String) : ClientDetailsEvent()
+    data class NavigateToClient(val clientId: String, val sessionId: String?) : ClientDetailsEvent()
+    data class OpenScheduleDialog(val session: Session) : ClientDetailsEvent()
+}
+
 @HiltViewModel
 class ClientDetailsViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle, // Accessed directly for logic
     private val repository: RaiRepository,
     private val manageSessionUseCase: ManageSessionUseCase,
     private val weeklyResetUseCase: WeeklyResetUseCase
 ) : ViewModel() {
 
-    // Hilt/Navigation automatically populates the SavedStateHandle with route arguments
     private val clientId: String = checkNotNull(savedStateHandle["clientId"])
 
     private val _uiState = MutableStateFlow(ClientDetailsUiState())
     val uiState: StateFlow<ClientDetailsUiState> = _uiState.asStateFlow()
+
+    private val _events = MutableSharedFlow<ClientDetailsEvent>()
+    val events: SharedFlow<ClientDetailsEvent> = _events.asSharedFlow()
 
     init {
         loadData()
@@ -47,7 +67,6 @@ class ClientDetailsViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            // Combine Client and Sessions into one state update
             combine(
                 repository.getClient(clientId),
                 repository.getSessionsForClient(clientId)
@@ -58,27 +77,26 @@ class ClientDetailsViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, error = "Client not found") }
                     return@collect
                 }
-
-                // 1. Sort Sessions
                 val sortedSessions = sessions.sortedWith(
-                    compareBy(
-                        { it.scheduledDay ?: 8 },
-                        { it.scheduledHour ?: 25 },
-                        { it.scheduledMinute ?: 61 },
-                        { it.name }
-                    )
+                    compareBy({ it.scheduledDay ?: 8 }, { it.scheduledHour ?: 25 })
                 )
-
-                // 2. Check for Weekly Reset (Ensure UI shows fresh state even if Worker hasn't run yet)
                 val processedSessions = weeklyResetUseCase(client, sortedSessions)
 
                 _uiState.update {
-                    it.copy(
-                        client = client,
-                        sessions = processedSessions,
-                        isLoading = false,
-                        error = null
-                    )
+                    it.copy(client = client, sessions = processedSessions, isLoading = false)
+                }
+
+                // Check for Auto-Reschedule Link
+                // We check if "rescheduleSessionId" was passed in navigation
+                val targetSessionId = savedStateHandle.get<String>("rescheduleSessionId")
+                if (targetSessionId != null) {
+                    val targetSession = processedSessions.find { it.id == targetSessionId }
+                    if (targetSession != null) {
+                        // Trigger UI to open dialog immediately
+                        _events.emit(ClientDetailsEvent.OpenScheduleDialog(targetSession))
+                        // Clear state so it doesn't happen again on rotation
+                        savedStateHandle["rescheduleSessionId"] = null
+                    }
                 }
             }
         }
@@ -94,88 +112,106 @@ class ClientDetailsViewModel @Inject constructor(
                         list.add(session.scheduledHour)
                     }
                 }
-                _uiState.update { it.copy(globalOccupiedSlots = map) }
+                _uiState.update {
+                    it.copy(
+                        globalOccupiedSlots = map,
+                        allGlobalSessions = allSessions
+                    )
+                }
             }
         }
     }
 
-    fun addSession(name: String) {
+    // --- Actions ---
+
+    fun tryUpdateSchedule(session: Session, day: Int, hour: Int) {
         viewModelScope.launch {
-            manageSessionUseCase.createSession(clientId, name)
+            // Check for conflict
+            val conflict = _uiState.value.allGlobalSessions.find {
+                it.scheduledDay == day &&
+                        it.scheduledHour == hour &&
+                        it.id != session.id &&
+                        !it.isSkippedThisWeek
+            }
+
+            if (conflict != null) {
+                // Find owner name
+                val ownerClient = repository.getClient(conflict.clientId).first()
+                val ownerName = ownerClient?.name ?: "Unknown"
+
+                // Trigger Dialog in UI
+                _events.emit(
+                    ClientDetailsEvent.ShowConflictDialog(
+                        conflictName = ownerName,
+                        conflictingSession = conflict,
+                        targetDay = day,
+                        targetHour = hour,
+                        sessionToSchedule = session
+                    )
+                )
+            } else {
+                // No conflict, just save
+                manageSessionUseCase.updateSchedule(clientId, session, day, hour, 0)
+                _events.emit(ClientDetailsEvent.ShowMessage("Scheduled!"))
+            }
         }
+    }
+
+    fun forceUpdateSchedule(
+        sessionToSchedule: Session,
+        conflictingSession: Session,
+        day: Int,
+        hour: Int
+    ) {
+        viewModelScope.launch {
+            // 1. Bump the conflicting session (Unschedule it)
+            val bumped = conflictingSession.copy(
+                scheduledDay = null, scheduledHour = null, scheduledMinute = null
+            )
+            repository.saveSession(bumped)
+
+            // 2. Schedule the new one
+            manageSessionUseCase.updateSchedule(clientId, sessionToSchedule, day, hour, 0)
+
+            // 3. Chain: Navigate to the bumped client so user can fix their schedule
+            if (conflictingSession.clientId != clientId) {
+                _events.emit(ClientDetailsEvent.ShowMessage("Overwritten. Rescheduling ${conflictingSession.name}..."))
+                _events.emit(
+                    ClientDetailsEvent.NavigateToClient(
+                        conflictingSession.clientId,
+                        conflictingSession.id
+                    )
+                )
+            } else {
+                _events.emit(ClientDetailsEvent.ShowMessage("Swapped successfully."))
+                // If same client, we could optionally open the dialog for the bumped session here too
+                // but usually the UI list updates and it moves to "Unscheduled"
+                _events.emit(ClientDetailsEvent.OpenScheduleDialog(bumped))
+            }
+        }
+    }
+
+    // Standard CRUD methods
+    fun addSession(name: String) {
+        viewModelScope.launch { manageSessionUseCase.createSession(clientId, name) }
     }
 
     fun renameSession(session: Session, newName: String) {
-        viewModelScope.launch {
-            manageSessionUseCase.renameSession(clientId, session, newName)
-        }
+        viewModelScope.launch { manageSessionUseCase.renameSession(clientId, session, newName) }
     }
 
     fun deleteSession(session: Session) {
-        viewModelScope.launch {
-            manageSessionUseCase.deleteSession(session.id)
-        }
+        viewModelScope.launch { manageSessionUseCase.deleteSession(session.id) }
     }
 
     fun toggleSkipSession(session: Session) {
-        viewModelScope.launch {
-            manageSessionUseCase.toggleSkipSession(clientId, session)
-        }
-    }
-
-    fun updateSchedule(session: Session, day: Int, hour: Int, minute: Int) {
-        viewModelScope.launch {
-            manageSessionUseCase.updateSchedule(clientId, session, day, hour, minute)
-        }
+        viewModelScope.launch { manageSessionUseCase.toggleSkipSession(clientId, session) }
     }
 
     fun onReorderSessions(newOrder: List<Session>) {
-        // Optimistic update
         _uiState.update { it.copy(sessions = newOrder) }
-
-        // When reordering via drag-and-drop, we generally want to swap their schedule times
-        // if they are scheduled, OR just change the list order if they aren't.
-        // The previous implementation swapped schedule properties. We'll maintain that logic.
-
-        val oldOrder =
-            _uiState.value.sessions // This might be the already updated one if flow emitted fast?
-        // Actually, for robust reordering, we should rely on the incoming list 'newOrder'
-        // and apply the schedule slots from the positions they landed in,
-        // OR just save the new list order.
-
-        // Previous logic: Swapping schedule times based on index.
-        // This is tricky because Flow updates come from DB.
-        // For simple reordering, we just save the list order to DB.
-        // BUT, if the list is sorted by Time in the UI (see loadData sorting),
-        // dragging to reorder effectively means "Reschedule".
-
-        // Since loadData sorts by time, manual reordering only really works for
-        // sessions with the SAME time (or unscheduled ones).
-        // The previous implementation tried to swap the time properties.
-
         viewModelScope.launch {
-            // Get current DB state to ensure we have valid times to swap
-            val currentSessions = repository.getSessionsForClient(clientId).first()
-                .sortedWith(compareBy({ it.scheduledDay ?: 8 }, { it.scheduledHour ?: 25 }))
-
-            val schedules = currentSessions.map {
-                Triple(
-                    it.scheduledDay,
-                    it.scheduledHour,
-                    it.scheduledMinute
-                )
-            }
-
-            val reorderedWithSwappedSchedules = newOrder.mapIndexed { index, session ->
-                if (index < schedules.size) {
-                    val (day, hour, min) = schedules[index]
-                    session.copy(scheduledDay = day, scheduledHour = hour, scheduledMinute = min)
-                } else {
-                    session
-                }
-            }
-
-            repository.updateSessionOrder(reorderedWithSwappedSchedules)
+            repository.updateSessionOrder(newOrder)
         }
     }
 }

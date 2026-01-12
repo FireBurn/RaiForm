@@ -1,5 +1,7 @@
 package uk.co.fireburn.raiform.ui.screens.scheduler
 
+import android.widget.Toast
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,40 +16,47 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NextWeek
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import uk.co.fireburn.raiform.domain.model.Client
-import uk.co.fireburn.raiform.domain.model.Session
+import kotlinx.coroutines.flow.collectLatest
 import uk.co.fireburn.raiform.ui.components.DartboardClock
 import java.time.DayOfWeek
 import java.time.format.TextStyle
@@ -60,6 +69,17 @@ fun MainSchedulerScreen(
     viewModel: MainSchedulerViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is SchedulerEvent.ShowMessage -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -74,145 +94,255 @@ fun MainSchedulerScreen(
         }
     ) { padding ->
         if (state.isAllSchedulingComplete) {
-            // Show Success Screen
             SchedulingCompleteView(
                 modifier = Modifier.padding(padding),
                 onBack = onNavigateBack
             )
         } else {
-            // Show Normal Scheduler
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. SELECT CLIENT
-                Text(
-                    "1. Select Client",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                // 1. DROPDOWNS ROW
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val highlightColor = MaterialTheme.colorScheme.primaryContainer
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.clients) { client ->
-                        ClientChip(
-                            client = client,
-                            isSelected = state.selectedClient?.id == client.id,
-                            onClick = { viewModel.selectClient(client) }
+                    // --- Client Dropdown with Pulse ---
+                    val clientPulse =
+                        remember { androidx.compose.animation.Animatable(Color.Transparent) }
+                    LaunchedEffect(state.selectedClient) {
+                        clientPulse.animateTo(highlightColor, tween(200))
+                        clientPulse.animateTo(Color.Transparent, tween(500))
+                    }
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        var expanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded }
+                        ) {
+                            OutlinedTextField(
+                                value = state.selectedClient?.name ?: "",
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true)
+                                    .fillMaxWidth()
+                                    .background(clientPulse.value, RoundedCornerShape(4.dp)),
+                                label = { Text("Client") },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                state.clients.forEach { client ->
+                                    DropdownMenuItem(
+                                        text = { Text(client.name) },
+                                        onClick = {
+                                            viewModel.selectClient(client)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // --- Session Dropdown with Pulse ---
+                    val sessionPulse =
+                        remember { androidx.compose.animation.Animatable(Color.Transparent) }
+                    LaunchedEffect(state.selectedSession) {
+                        sessionPulse.animateTo(highlightColor, tween(200))
+                        sessionPulse.animateTo(Color.Transparent, tween(500))
+                    }
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        var expanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded }
+                        ) {
+                            OutlinedTextField(
+                                value = state.selectedSession?.name ?: "",
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true)
+                                    .fillMaxWidth()
+                                    .background(sessionPulse.value, RoundedCornerShape(4.dp)),
+                                label = { Text("Session") },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                state.clientSessions.forEach { session ->
+                                    val timeInfo = if (session.scheduledDay != null) {
+                                        val d = DayOfWeek.of(session.scheduledDay)
+                                            .getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                                        " ($d ${session.scheduledHour}h)"
+                                    } else ""
+
+                                    DropdownMenuItem(
+                                        text = { Text("${session.name}$timeInfo") },
+                                        onClick = {
+                                            viewModel.selectSession(session)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. DAY SELECTOR
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    for (day in 1..7) {
+                        val dayName = DayOfWeek.of(day)
+                            .getDisplayName(TextStyle.NARROW, Locale.getDefault())
+
+                        DayCircle(
+                            text = dayName,
+                            isSelected = state.selectedDay == day,
+                            onClick = { viewModel.selectDay(day) }
                         )
                     }
                 }
 
-                // 2. SELECT SESSION
-                if (state.clientSessions.isNotEmpty()) {
-                    Text(
-                        "2. Select Session",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.clientSessions) { session ->
-                            SessionChip(
-                                session = session,
-                                isSelected = state.selectedSession?.id == session.id,
-                                onClick = { viewModel.selectSession(session) }
-                            )
-                        }
-                    }
-                }
-
-                // 3. SCHEDULE (Day & Time)
-                if (state.selectedSession != null) {
-                    Text(
-                        "3. Assign Schedule",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        for (day in 1..7) {
-                            val dayName =
-                                DayOfWeek.of(day)
-                                    .getDisplayName(TextStyle.SHORT, Locale.getDefault())
-
-                            DayButton(
-                                text = dayName,
-                                isSelected = state.selectedDay == day,
-                                onClick = { viewModel.selectDay(day) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
+                // 3. CLOCK (Takes remaining space)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
                     val taken = state.occupiedSlots[state.selectedDay] ?: emptyList()
-
                     DartboardClock(
                         takenHours = taken,
                         selectedHour = state.selectedHour,
                         onHourSelected = { viewModel.selectHour(it) }
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                // 4. MAIN ACTION BUTTON (Confirm)
+                val isConflict = state.detectedConflictName != null
+                val btnContainerColor =
+                    if (isConflict) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                val btnContentColor =
+                    if (isConflict) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
 
-                    // 4. ACTION BUTTONS (Skip / Next Week)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Button(
-                            onClick = { viewModel.skipSession() },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(Icons.Default.Cancel, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("SKIP")
-                        }
-
-                        Button(
-                            onClick = { viewModel.moveToNextWeek() },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.NextWeek, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("NEXT WEEK")
-                        }
-                    }
-                } else if (state.selectedClient != null && state.clientSessions.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                Button(
+                    onClick = { viewModel.confirmSchedule() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = btnContainerColor),
+                    enabled = state.selectedHour != -1
+                ) {
+                    if (isConflict) {
+                        Icon(Icons.Default.Warning, null, tint = btnContentColor)
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            "All sessions scheduled!",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = Color.Green
+                            "OVERWRITE ${state.detectedConflictName?.uppercase()}?",
+                            color = btnContentColor,
+                            fontWeight = FontWeight.Bold
                         )
+                    } else {
+                        Icon(Icons.Default.Check, null, tint = btnContentColor)
+                        Spacer(Modifier.width(8.dp))
+                        Text("CONFIRM TIME", color = btnContentColor, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // 5. SECONDARY ACTIONS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.skipSession() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Cancel, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("SKIP", fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = { viewModel.moveToNextWeek() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.NextWeek,
+                            null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("NEXT WEEK", fontSize = 12.sp)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DayCircle(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor =
+        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val textColor = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .clickable { onClick() }
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = textColor
+        )
     }
 }
 
@@ -251,56 +381,5 @@ fun SchedulingCompleteView(modifier: Modifier = Modifier, onBack: () -> Unit) {
         ) {
             Text("Back to Dashboard")
         }
-    }
-}
-
-@Composable
-fun ClientChip(client: Client, isSelected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = { Text(client.name) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = Color.Black
-        )
-    )
-}
-
-@Composable
-fun SessionChip(session: Session, isSelected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = { Text(session.name) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.secondary,
-            selectedLabelColor = Color.Black
-        )
-    )
-}
-
-@Composable
-fun DayButton(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .height(40.dp)
-            .clip(CircleShape)
-            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() }
-            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
-        )
     }
 }

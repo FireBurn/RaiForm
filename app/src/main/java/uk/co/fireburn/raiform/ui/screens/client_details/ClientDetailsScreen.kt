@@ -1,8 +1,7 @@
 package uk.co.fireburn.raiform.ui.screens.client_details
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -30,6 +28,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,17 +54,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import kotlinx.coroutines.flow.collectLatest
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import uk.co.fireburn.raiform.domain.model.Session
-import uk.co.fireburn.raiform.ui.components.DartboardClock
+import uk.co.fireburn.raiform.ui.components.DartboardScheduleDialog
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 import java.util.Locale
@@ -77,14 +77,42 @@ fun ClientDetailsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSession: (String, String) -> Unit,
     onNavigateToStats: (String) -> Unit,
+    onNavigateToClient: (String, String?) -> Unit,
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     var showAddDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
+
+    // Conflict State
+    var conflictData by remember { mutableStateOf<ClientDetailsEvent.ShowConflictDialog?>(null) }
+
+    // Event Listener
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is ClientDetailsEvent.ShowMessage -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+
+                is ClientDetailsEvent.ShowConflictDialog -> {
+                    conflictData = event
+                }
+
+                is ClientDetailsEvent.NavigateToClient -> {
+                    onNavigateToClient(event.clientId, event.sessionId)
+                }
+
+                is ClientDetailsEvent.OpenScheduleDialog -> {
+                    sessionToSchedule = event.session
+                }
+            }
+        }
+    }
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -190,6 +218,8 @@ fun ClientDetailsScreen(
             }
         }
 
+        // --- Dialogs ---
+
         if (sessionToSchedule != null) {
             DartboardScheduleDialog(
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
@@ -198,8 +228,34 @@ fun ClientDetailsScreen(
                 sessionToIgnoreId = sessionToSchedule!!.id,
                 onDismiss = { sessionToSchedule = null },
                 onSave = { d, h ->
-                    viewModel.updateSchedule(sessionToSchedule!!, d, h, 0)
+                    viewModel.tryUpdateSchedule(sessionToSchedule!!, d, h)
                     sessionToSchedule = null
+                }
+            )
+        }
+
+        if (conflictData != null) {
+            val data = conflictData!!
+            AlertDialog(
+                onDismissRequest = { conflictData = null },
+                title = { Text("Slot Occupied") },
+                text = { Text("This time is already taken by ${data.conflictName}. Do you want to unschedule them and take this slot?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.forceUpdateSchedule(
+                                data.sessionToSchedule,
+                                data.conflictingSession,
+                                data.targetDay,
+                                data.targetHour
+                            )
+                            conflictData = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Text("Overwrite & Fix") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { conflictData = null }) { Text("Cancel") }
                 }
             )
         }
@@ -353,70 +409,4 @@ fun SessionCard(
             }
         }
     }
-}
-
-@Composable
-fun DartboardScheduleDialog(
-    currentDay: Int,
-    currentHour: Int,
-    globalOccupiedSlots: Map<Int, List<Int>>,
-    sessionToIgnoreId: String,
-    onDismiss: () -> Unit,
-    onSave: (Int, Int) -> Unit
-) {
-    var selectedDay by remember { mutableStateOf(currentDay) }
-
-    val takenForDay = globalOccupiedSlots[selectedDay] ?: emptyList()
-    val displayTaken = if (selectedDay == currentDay) {
-        // Don't show the current session's time as "Taken" (allow overwrite)
-        takenForDay.filter { it != currentHour }
-    } else {
-        takenForDay
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Schedule Session") },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (day in 1..7) {
-                        val dayName =
-                            DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault())
-                        val isSelected = (day == selectedDay)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(36.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                .clickable { selectedDay = day },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = dayName,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                DartboardClock(
-                    takenHours = displayTaken,
-                    selectedHour = currentHour,
-                    onHourSelected = { hour -> onSave(selectedDay, hour) }
-                )
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
