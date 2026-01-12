@@ -3,7 +3,7 @@ package uk.co.fireburn.raiform.util
 import uk.co.fireburn.raiform.domain.model.Exercise
 import uk.co.fireburn.raiform.domain.model.Session
 import java.util.Locale
-import java.util.UUID // Add this import
+import java.util.UUID
 
 object LegacyParser {
 

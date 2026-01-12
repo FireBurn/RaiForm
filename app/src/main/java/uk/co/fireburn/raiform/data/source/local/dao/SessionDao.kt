@@ -1,6 +1,7 @@
 package uk.co.fireburn.raiform.data.source.local.dao
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -65,11 +66,20 @@ interface SessionDao {
 
     // --- Link Management (The Connection) ---
 
+    /**
+     * Used for diffing in the Repository. Fetches the raw join entities.
+     */
+    @Query("SELECT * FROM session_exercises WHERE sessionId = :sessionId")
+    suspend fun getLinksForSession(sessionId: String): List<SessionExerciseEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLink(link: SessionExerciseEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLinks(links: List<SessionExerciseEntity>)
+
+    @Update
+    suspend fun updateLink(link: SessionExerciseEntity)
 
     @Query("SELECT * FROM session_exercises WHERE id = :linkId")
     suspend fun getLinkById(linkId: String): SessionExerciseEntity?
@@ -77,9 +87,18 @@ interface SessionDao {
     @Query("UPDATE session_exercises SET isDone = :isDone WHERE id = :linkId")
     suspend fun updateLinkStatus(linkId: String, isDone: Boolean)
 
-    @Query("DELETE FROM session_exercises WHERE id = :linkId")
-    suspend fun deleteLink(linkId: String)
+    @Delete
+    suspend fun deleteLink(link: SessionExerciseEntity)
 
+    /**
+     * Deletes a specific list of links. Used during saveSession diffing.
+     */
+    @Delete
+    suspend fun deleteLinks(links: List<SessionExerciseEntity>)
+
+    /**
+     * Nuke option: Deletes all links for a session.
+     */
     @Query("DELETE FROM session_exercises WHERE sessionId = :sessionId")
     suspend fun clearLinksForSession(sessionId: String)
 }
