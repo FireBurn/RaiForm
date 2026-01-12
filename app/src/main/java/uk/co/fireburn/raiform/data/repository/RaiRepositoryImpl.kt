@@ -1,11 +1,14 @@
 package uk.co.fireburn.raiform.data.repository
 
 import androidx.room.withTransaction
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import uk.co.fireburn.raiform.data.source.local.RaiFormDatabase
 import uk.co.fireburn.raiform.data.source.local.dao.ClientDao
@@ -27,11 +30,12 @@ import javax.inject.Singleton
 
 @Singleton
 class RaiRepositoryImpl @Inject constructor(
-    private val db: RaiFormDatabase, // Injected for Transactions
+    private val db: RaiFormDatabase,
     private val clientDao: ClientDao,
     private val sessionDao: SessionDao,
     private val historyDao: HistoryDao,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val firebaseAuth: FirebaseAuth
 ) : RaiRepository {
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,7 +61,12 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveClient(client: Client) {
-        clientDao.insertClient(ClientEntity.fromDomain(client))
+        val entity = ClientEntity.fromDomain(client)
+        // Perform manual Upsert to avoid REPLACE causing Cascade Delete of Sessions
+        val updatedRows = clientDao.updateClient(entity)
+        if (updatedRows == 0) {
+            clientDao.insertClient(entity)
+        }
     }
 
     override suspend fun archiveClient(clientId: String) {
@@ -91,19 +100,12 @@ class RaiRepositoryImpl @Inject constructor(
     }
 
     override suspend fun saveSession(session: Session) {
-        // Run in transaction to prevent partial state emission (flickering/empty lists)
         db.withTransaction {
-            // 1. Save Metadata
             sessionDao.insertSession(SessionEntity.fromDomain(session))
-
-            // 2. Clear old links to ensure clean state
             sessionDao.clearLinksForSession(session.id)
 
-            // 3. Re-create links and templates
             session.exercises.forEachIndexed { index, exercise ->
                 val formattedName = exercise.name.trim()
-
-                // Check/Create Template
                 var template = sessionDao.findTemplateByName(session.clientId, formattedName)
 
                 if (template == null) {
@@ -117,9 +119,9 @@ class RaiRepositoryImpl @Inject constructor(
                         reps = exercise.reps,
                         maintainWeight = exercise.maintainWeight
                     )
-                    sessionDao.insertTemplate(template!!)
+                    sessionDao.insertTemplate(template)
                 } else {
-                    val updatedTemplate = template!!.copy(
+                    val updatedTemplate = template.copy(
                         weight = exercise.weight,
                         sets = exercise.sets,
                         reps = exercise.reps,
@@ -130,11 +132,10 @@ class RaiRepositoryImpl @Inject constructor(
                     template = updatedTemplate
                 }
 
-                // Create Link
                 val link = SessionExerciseEntity(
                     id = if (exercise.id.length > 10) exercise.id else UUID.randomUUID().toString(),
                     sessionId = session.id,
-                    templateId = template!!.id, // Fixed warning
+                    templateId = template.id,
                     isDone = exercise.isDone,
                     orderIndex = index
                 )
@@ -168,7 +169,46 @@ class RaiRepositoryImpl @Inject constructor(
         historyDao.insertLog(HistoryEntity.fromDomain(log))
     }
 
+    // --- SYNC ---
+
     override suspend fun sync() {
-        // Sync logic placeholder
+        val currentUser = firebaseAuth.currentUser
+        if (currentUser == null) return
+
+        val uid = currentUser.uid
+        val userDocRef = firestore.collection("users").document(uid)
+
+        try {
+            // 1. Sync Clients
+            val clients = clientDao.getAllClients().first()
+            clients.forEach { clientEntity ->
+                userDocRef.collection("clients")
+                    .document(clientEntity.id)
+                    .set(clientEntity, SetOptions.merge())
+            }
+
+            // 2. Sync Sessions
+            val sessions = sessionDao.getAllSessions().first()
+            sessions.forEach { sessionPopulated ->
+                val domainSession = sessionPopulated.toDomain()
+                userDocRef.collection("sessions")
+                    .document(domainSession.id)
+                    .set(domainSession, SetOptions.merge())
+            }
+
+            // 3. Sync History
+            val history = historyDao.getAllHistoryLogs().first()
+            history.forEach { historyEntity ->
+                userDocRef.collection("history")
+                    .document(historyEntity.id)
+                    .set(historyEntity, SetOptions.merge())
+            }
+
+            // Timestamp
+            userDocRef.set(mapOf("lastSync" to System.currentTimeMillis()), SetOptions.merge())
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

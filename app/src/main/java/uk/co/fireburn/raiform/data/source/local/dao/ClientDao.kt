@@ -27,8 +27,9 @@ interface ClientDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertClients(clients: List<ClientEntity>)
 
+    // Changed return type to Int to support Upsert logic
     @Update
-    suspend fun updateClient(client: ClientEntity)
+    suspend fun updateClient(client: ClientEntity): Int
 
     @Query("UPDATE clients SET status = :status WHERE id = :clientId")
     suspend fun updateClientStatus(clientId: String, status: ClientStatus)
