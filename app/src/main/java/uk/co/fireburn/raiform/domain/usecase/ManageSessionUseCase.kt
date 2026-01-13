@@ -18,7 +18,11 @@ class ManageSessionUseCase @Inject constructor(
 
     suspend fun renameSession(clientId: String, session: Session, newName: String) {
         if (newName.isBlank()) return
-        val updatedSession = session.copy(name = newName.toTitleCase())
+        // If a linked session is renamed, break the link (set groupId to null)
+        val updatedSession = session.copy(
+            name = newName.toTitleCase(),
+            groupId = null
+        )
         repository.saveSession(updatedSession)
     }
 
@@ -62,17 +66,35 @@ class ManageSessionUseCase @Inject constructor(
         sets: Int,
         reps: Int
     ) {
-        val newExercise = Exercise(
-            id = UUID.randomUUID().toString(),
-            name = name.toTitleCase(),
-            weight = weight,
-            isBodyweight = isBodyweight,
-            sets = sets,
-            reps = reps
-        )
-        val updatedExercises = session.exercises + newExercise
-        val updatedSession = session.copy(exercises = updatedExercises)
-        repository.saveSession(updatedSession)
+        // Collect all sessions that need this exercise added
+        val sessionsToUpdate = mutableListOf<Session>()
+
+        // 1. Add current session
+        sessionsToUpdate.add(session)
+
+        // 2. If part of a group, find others
+        if (session.groupId != null) {
+            val linkedSessions = repository.getSessionsByGroup(clientId, session.groupId)
+            // Add all EXCEPT the current one (already added)
+            sessionsToUpdate.addAll(linkedSessions.filter { it.id != session.id })
+        }
+
+        // 3. Add exercise to all identified sessions
+        sessionsToUpdate.forEach { targetSession ->
+            // We must generate a NEW UUID for each exercise instance
+            val newExercise = Exercise(
+                id = UUID.randomUUID().toString(),
+                name = name.toTitleCase(),
+                weight = weight,
+                isBodyweight = isBodyweight,
+                sets = sets,
+                reps = reps
+            )
+
+            val updatedExercises = targetSession.exercises + newExercise
+            val updatedSession = targetSession.copy(exercises = updatedExercises)
+            repository.saveSession(updatedSession)
+        }
     }
 
     suspend fun updateExercise(

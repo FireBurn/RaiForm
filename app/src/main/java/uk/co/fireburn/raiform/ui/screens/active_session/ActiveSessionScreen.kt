@@ -47,9 +47,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,22 +98,17 @@ fun ActiveSessionScreen(
     val session = state.session
     val context = LocalContext.current
 
-    // State to hold the active ringtone so we can stop it later
     var activeRingtone by remember { mutableStateOf<Ringtone?>(null) }
     var isAlarmRinging by remember { mutableStateOf(false) }
 
-    // Cleanup ringtone if user leaves screen
     DisposableEffect(Unit) {
-        onDispose {
-            activeRingtone?.stop()
-        }
+        onDispose { activeRingtone?.stop() }
     }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is ActiveSessionEvent.TimerFinished -> {
-                    // Play sound and vibrate
                     activeRingtone = playAlarmSound(context)
                     vibratePhone(context)
                     isAlarmRinging = true
@@ -119,6 +119,7 @@ fun ActiveSessionScreen(
 
     var exerciseInDialog by remember { mutableStateOf<Exercise?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
+    var preFillData by remember { mutableStateOf<Exercise?>(null) }
 
     Scaffold(
         topBar = {
@@ -158,7 +159,7 @@ fun ActiveSessionScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Rest Timer Header (Modified)
+                // 1. Rest Timer Header
                 item {
                     RestTimerHeader(
                         isRunning = state.isTimerRunning,
@@ -166,13 +167,11 @@ fun ActiveSessionScreen(
                         timeLeft = state.timerValue,
                         totalTime = state.timerTotalTime,
                         onStart = {
-                            // Ensure previous alarm is stopped before starting new
                             activeRingtone?.stop()
                             isAlarmRinging = false
                             viewModel.startTimer(it)
                         },
                         onStop = {
-                            // Stop Timer Logic
                             viewModel.stopTimer()
                             activeRingtone?.stop()
                             isAlarmRinging = false
@@ -180,17 +179,23 @@ fun ActiveSessionScreen(
                     )
                 }
 
-                // 2. List of Exercises
+                // 2. List of Exercises with Headers
                 items(session.exercises, key = { it.id }) { exercise ->
-                    ActiveExerciseCard(
-                        exercise = exercise,
-                        onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                        onEdit = {
-                            isCreatingNew = false
-                            exerciseInDialog = exercise
-                        },
-                        onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
-                    )
+                    if (exercise.sets == 0 && exercise.reps == 0) {
+                        // Render Section Header
+                        SectionHeader(title = exercise.name)
+                    } else {
+                        // Render Exercise Card
+                        ActiveExerciseCard(
+                            exercise = exercise,
+                            onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                            onEdit = {
+                                isCreatingNew = false
+                                exerciseInDialog = exercise
+                            },
+                            onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
+                        )
+                    }
                 }
 
                 item {
@@ -221,7 +226,19 @@ fun ActiveSessionScreen(
             ExerciseDialog(
                 exercise = exerciseInDialog!!,
                 isNew = isCreatingNew,
-                onDismiss = { exerciseInDialog = null },
+                allExerciseNames = state.allExerciseNames,
+                preFillData = preFillData,
+                onDismiss = {
+                    exerciseInDialog = null
+                    preFillData = null
+                },
+                onNameSelected = { name ->
+                    // Auto-fill trigger
+                    viewModel.getExistingStatsForExercise(name) { w, s, r, bw ->
+                        preFillData =
+                            Exercise(name = name, weight = w, sets = s, reps = r, isBodyweight = bw)
+                    }
+                },
                 onConfirm = { name, weight, isBodyweight, sets, reps ->
                     if (isCreatingNew) {
                         viewModel.addExercise(name, weight, isBodyweight, sets, reps)
@@ -236,27 +253,22 @@ fun ActiveSessionScreen(
                         )
                     }
                     exerciseInDialog = null
+                    preFillData = null
                 },
                 onDelete = {
                     if (!isCreatingNew) {
                         viewModel.deleteExercise(exerciseInDialog!!.id)
                     }
                     exerciseInDialog = null
+                    preFillData = null
                 }
             )
         }
     }
 }
 
-/**
- * Plays the default alarm sound.
- * Checks for Silent/Vibrate mode first to avoid disruption.
- * Sets AudioAttributes to ALARM to ensure correct routing.
- */
 private fun playAlarmSound(context: Context): Ringtone? {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-    // Don't play sound if the phone is in Silent or Vibrate mode
     if (audioManager.ringerMode == AudioManager.RINGER_MODE_SILENT ||
         audioManager.ringerMode == AudioManager.RINGER_MODE_VIBRATE
     ) {
@@ -275,7 +287,7 @@ private fun playAlarmSound(context: Context): Ringtone? {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            r.isLooping = true // Loop until stopped
+            r.isLooping = true
         }
         r.play()
         r
@@ -294,8 +306,6 @@ private fun vibratePhone(context: Context) {
         @Suppress("DEPRECATION")
         context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     }
-
-    // Vibrate for 1 second
     vibrator.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
 }
 
@@ -309,12 +319,11 @@ fun RestTimerHeader(
     onStop: () -> Unit
 ) {
     if (isAlarmRinging) {
-        // --- ALARM RINGING STATE ---
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .clickable { onStop() }, // Click anywhere to stop
+                .clickable { onStop() },
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error),
             shape = MaterialTheme.shapes.medium
         ) {
@@ -339,7 +348,6 @@ fun RestTimerHeader(
             }
         }
     } else if (isRunning) {
-        // --- COUNTDOWN STATE ---
         val progressFraction by animateFloatAsState(
             targetValue = if (totalTime > 0) timeLeft.toFloat() / totalTime.toFloat() else 0f,
             label = "TimerProgress",
@@ -355,7 +363,6 @@ fun RestTimerHeader(
             shape = MaterialTheme.shapes.medium
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background Fill Animation
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -381,7 +388,6 @@ fun RestTimerHeader(
             }
         }
     } else {
-        // --- IDLE STATE (Two Buttons) ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -417,7 +423,32 @@ fun RestTimerHeader(
     }
 }
 
-// Helper to format Double weight (removes .0 if whole number)
+@Composable
+fun SectionHeader(title: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+    }
+}
+
 private fun formatWeight(value: Double): String {
     return if (value % 1.0 == 0.0) {
         value.toInt().toString()
@@ -449,7 +480,6 @@ fun ActiveExerciseCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Drag handle removed
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (exercise.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
@@ -516,18 +546,39 @@ fun ActiveExerciseCard(
 fun ExerciseDialog(
     exercise: Exercise,
     isNew: Boolean,
+    allExerciseNames: List<String>,
+    preFillData: Exercise? = null,
     onDismiss: () -> Unit,
     onConfirm: (String, Double, Boolean, Int, Int) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onNameSelected: (String) -> Unit
 ) {
     var nameText by remember { mutableStateOf(exercise.name) }
-    // Use formatWeight for initial display
     var weightText by remember { mutableStateOf(formatWeight(abs(exercise.weight))) }
     var weightModifier by remember { mutableIntStateOf(if (exercise.weight >= 0) 1 else -1) }
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
     var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    // Auto-fill logic
+    LaunchedEffect(preFillData) {
+        preFillData?.let {
+            weightText = formatWeight(abs(it.weight))
+            setsText = it.sets.toString()
+            repsText = it.reps.toString()
+            isBodyweight = it.isBodyweight
+            // Name is already set by the selection
+        }
+    }
+
+    var expanded by remember { mutableStateOf(false) }
+    val filteredOptions = remember(nameText, allExerciseNames) {
+        if (nameText.isBlank()) emptyList()
+        else allExerciseNames.filter {
+            it.contains(nameText, ignoreCase = true) && !it.equals(nameText, ignoreCase = true)
+        }.take(5)
+    }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -550,11 +601,48 @@ fun ExerciseDialog(
             title = { Text(if (isNew) "New Exercise" else "Edit Exercise") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    OutlinedTextField(
-                        value = nameText, onValueChange = { nameText = it },
-                        label = { Text("Exercise Name") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+
+                    // Exposed Dropdown Menu Box
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = nameText,
+                            onValueChange = {
+                                nameText = it
+                                expanded = true
+                            },
+                            label = { Text("Exercise Name") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(
+                                    ExposedDropdownMenuAnchorType.PrimaryEditable,
+                                    true
+                                ),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        )
+
+                        if (filteredOptions.isNotEmpty()) {
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                filteredOptions.forEach { selectionOption ->
+                                    DropdownMenuItem(
+                                        text = { Text(selectionOption) },
+                                        onClick = {
+                                            nameText = selectionOption
+                                            expanded = false
+                                            onNameSelected(selectionOption)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,

@@ -27,7 +27,8 @@ data class ActiveSessionUiState(
     val isLoading: Boolean = true,
     val timerValue: Int = 60,
     val timerTotalTime: Int = 60,
-    val isTimerRunning: Boolean = false
+    val isTimerRunning: Boolean = false,
+    val allExerciseNames: List<String> = emptyList()
 )
 
 @HiltViewModel
@@ -50,15 +51,33 @@ class ActiveSessionViewModel @Inject constructor(
 
     init {
         loadSession()
+        loadExerciseNames()
     }
 
     private fun loadSession() {
         viewModelScope.launch {
             repository.getSession(sessionId).collect { session ->
-                val sortedSession = session?.copy(
-                    exercises = session.exercises.sortedBy { it.name }
-                )
-                _uiState.update { it.copy(session = sortedSession, isLoading = false) }
+                _uiState.update { it.copy(session = session, isLoading = false) }
+            }
+        }
+    }
+
+    private fun loadExerciseNames() {
+        viewModelScope.launch {
+            repository.getAllExerciseNames().collect { names ->
+                _uiState.update { it.copy(allExerciseNames = names) }
+            }
+        }
+    }
+
+    // NEW: Fetch existing stats to pre-fill the dialog
+    fun getExistingStatsForExercise(name: String, callback: (Double, Int, Int, Boolean) -> Unit) {
+        viewModelScope.launch {
+            val stats = repository.findExerciseStats(clientId, name)
+            if (stats != null) {
+                val (weight, sets, reps) = stats
+                val isBw = (weight == 0.0)
+                callback(weight, sets, reps, isBw)
             }
         }
     }
@@ -66,7 +85,6 @@ class ActiveSessionViewModel @Inject constructor(
     // --- Timer Logic ---
 
     fun startTimer(seconds: Int) {
-        // Stop any existing timer first
         timerJob?.cancel()
 
         _uiState.update {
@@ -92,7 +110,7 @@ class ActiveSessionViewModel @Inject constructor(
                 }
 
                 _uiState.update { it.copy(timerValue = remainingSeconds) }
-                delay(200) // Update UI 5 times a second for smoothness, but logic relies on system time
+                delay(200)
             }
         }
     }

@@ -94,6 +94,24 @@ class RaiRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getSessionsByGroup(clientId: String, groupId: String): List<Session> {
+        return sessionDao.getSessionsByGroup(clientId, groupId).map { it.toDomain() }
+    }
+
+    override fun getAllExerciseNames(): Flow<List<String>> {
+        return sessionDao.getAllExerciseNames()
+    }
+
+    override suspend fun findExerciseStats(
+        clientId: String,
+        exerciseName: String
+    ): Triple<Double, Int, Int>? {
+        val template = sessionDao.findTemplateByName(clientId, exerciseName.trim())
+        return if (template != null) {
+            Triple(template.weight, template.sets, template.reps)
+        } else null
+    }
+
     override suspend fun saveSession(session: Session) {
         db.withTransaction {
             sessionDao.insertSession(SessionEntity.fromDomain(session))

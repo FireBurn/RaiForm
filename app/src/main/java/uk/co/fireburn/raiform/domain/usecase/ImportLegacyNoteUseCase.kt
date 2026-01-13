@@ -11,19 +11,18 @@ class ImportLegacyNoteUseCase @Inject constructor(
 
     /**
      * Preview: Parses text without saving to Database.
-     * Used for UI feedback before the user commits.
      */
-    fun preview(rawText: String): LegacyParser.ParseResult {
-        return LegacyParser.parseLegacyNote(rawText)
+    fun preview(rawText: String, combineSessions: Boolean): LegacyParser.ParseResult {
+        return LegacyParser.parseLegacyNote(rawText, combineSessions)
     }
 
     /**
      * Commit: Parses and saves to Database.
      */
-    suspend operator fun invoke(rawText: String): Result<String> {
+    suspend operator fun invoke(rawText: String, combineSessions: Boolean): Result<String> {
         return try {
             // 1. Parse pure text into domain objects
-            val parseResult = LegacyParser.parseLegacyNote(rawText)
+            val parseResult = LegacyParser.parseLegacyNote(rawText, combineSessions)
 
             // 2. Create the Client Entity
             val newClient = Client(name = parseResult.clientName)

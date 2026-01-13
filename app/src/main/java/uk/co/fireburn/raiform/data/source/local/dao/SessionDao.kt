@@ -30,8 +30,12 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE isDeleted = 0")
     fun getAllSessions(): Flow<List<SessionPopulated>>
 
+    // Get Linked Sessions
+    @Transaction
+    @Query("SELECT * FROM sessions WHERE groupId = :groupId AND clientId = :clientId AND isDeleted = 0")
+    suspend fun getSessionsByGroup(clientId: String, groupId: String): List<SessionPopulated>
+
     // --- Sync Query (Includes deleted) ---
-    // Note: We return SessionEntity here (flat), not Populated, for simpler syncing
     @Query("SELECT * FROM sessions WHERE lastSyncTimestamp > :timestamp")
     suspend fun getSessionsForSync(timestamp: Long): List<SessionEntity>
 
@@ -40,7 +44,6 @@ interface SessionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: SessionEntity)
 
-    // Used by Sync Pull
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSessions(sessions: List<SessionEntity>)
 
@@ -51,7 +54,6 @@ interface SessionDao {
     @Query("UPDATE sessions SET isDeleted = 1, lastSyncTimestamp = :timestamp WHERE id = :sessionId")
     suspend fun softDeleteSession(sessionId: String, timestamp: Long)
 
-    // Hard Delete (Only for cleanup if needed later)
     @Query("DELETE FROM sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)
 
@@ -71,6 +73,10 @@ interface SessionDao {
 
     @Query("SELECT * FROM exercise_templates WHERE id = :templateId")
     suspend fun getTemplateById(templateId: String): ExerciseTemplateEntity?
+
+    // For Auto-complete Dropdown
+    @Query("SELECT DISTINCT name FROM exercise_templates ORDER BY name ASC")
+    fun getAllExerciseNames(): Flow<List<String>>
 
     // --- Link Management ---
 

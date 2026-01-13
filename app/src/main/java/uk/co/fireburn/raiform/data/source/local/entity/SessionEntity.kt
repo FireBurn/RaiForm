@@ -17,13 +17,14 @@ import uk.co.fireburn.raiform.domain.model.Session
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("clientId")]
+    indices = [Index("clientId"), Index("groupId")]
 )
 data class SessionEntity(
     @PrimaryKey
     val id: String,
     val clientId: String,
     val name: String,
+    val groupId: String?,
     val scheduledDay: Int?,
     val scheduledHour: Int?,
     val scheduledMinute: Int?,
@@ -37,6 +38,7 @@ data class SessionEntity(
         id = id,
         clientId = clientId,
         name = name,
+        groupId = groupId,
         exercises = exercises,
         scheduledDay = scheduledDay,
         scheduledHour = scheduledHour,
@@ -52,6 +54,7 @@ data class SessionEntity(
                 id = session.id,
                 clientId = session.clientId,
                 name = session.name,
+                groupId = session.groupId,
                 scheduledDay = session.scheduledDay,
                 scheduledHour = session.scheduledHour,
                 scheduledMinute = session.scheduledMinute,

@@ -5,11 +5,6 @@ import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.HistoryLog
 import uk.co.fireburn.raiform.domain.model.Session
 
-/**
- * Main Repository Interface.
- * Acts as the single source of truth for data access, abstracting away
- * the specific data sources (Room/Local vs Firestore/Remote).
- */
 interface RaiRepository {
 
     // --- Clients ---
@@ -27,7 +22,6 @@ interface RaiRepository {
 
     suspend fun restoreClient(clientId: String)
 
-    // Permanently delete a client
     suspend fun deleteClient(clientId: String)
 
     // --- Sessions ---
@@ -35,10 +29,16 @@ interface RaiRepository {
 
     fun getSession(sessionId: String): Flow<Session?>
 
-    /**
-     * Used for the Global Scheduler to see all slots across all clients.
-     */
     fun getAllSessions(): Flow<List<Session>>
+
+    // Fetch linked sessions (Required for smart import replication)
+    suspend fun getSessionsByGroup(clientId: String, groupId: String): List<Session>
+
+    // Exercise name autocomplete
+    fun getAllExerciseNames(): Flow<List<String>>
+
+    // Helper to find previous stats
+    suspend fun findExerciseStats(clientId: String, exerciseName: String): Triple<Double, Int, Int>?
 
     suspend fun saveSession(session: Session)
 
@@ -49,15 +49,10 @@ interface RaiRepository {
     // --- History & Logging ---
     fun getHistoryForClient(clientId: String): Flow<List<HistoryLog>>
 
-    // Get all history logs (for export)
     fun getAllHistoryLogs(): Flow<List<HistoryLog>>
 
     suspend fun logHistory(log: HistoryLog)
 
     // --- Sync & Data Management ---
-    /**
-     * Triggers a synchronization between Local DB (Room) and Remote (Firestore).
-     * Usually called by WorkManager, but can be forced by UI.
-     */
     suspend fun sync()
 }
