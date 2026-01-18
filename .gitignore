@@ -16,6 +16,7 @@ gen/
 out/
 build/
 .gradle/
+.kotlin/
 .navigation/
 
 # Local configuration file (contains SDK path)
