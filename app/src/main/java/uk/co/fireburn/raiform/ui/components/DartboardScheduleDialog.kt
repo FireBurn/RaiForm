@@ -7,11 +7,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NextWeek
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +49,8 @@ fun DartboardScheduleDialog(
     globalOccupiedSlots: Map<Int, List<Int>>,
     sessionToIgnoreId: String,
     onDismiss: () -> Unit,
+    onSkip: () -> Unit,
+    onNextWeek: () -> Unit,
     onSave: (Int, Int) -> Unit
 ) {
     var selectedDay by remember { mutableIntStateOf(currentDay) }
@@ -73,7 +84,7 @@ fun DartboardScheduleDialog(
                     for (day in 1..7) {
                         val dayName = DayOfWeek.of(day)
                             .getDisplayName(TextStyle.SHORT, Locale.getDefault())
-                            .take(1) // Just first letter for compactness
+                            .take(1)
 
                         val isSelected = (day == selectedDay)
                         val bgColor =
@@ -111,9 +122,55 @@ fun DartboardScheduleDialog(
                     selectedHour = if (selectedDay == currentDay) currentHour else -1,
                     onHourSelected = { hour -> onSave(selectedDay, hour) }
                 )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Action Buttons (Skip / Next Week)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onSkip,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Cancel, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("SKIP", fontSize = 12.sp)
+                    }
+
+                    Button(
+                        onClick = onNextWeek,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.NextWeek,
+                            null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("NEXT WEEK", fontSize = 12.sp)
+                    }
+                }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
     )
 }

@@ -81,7 +81,7 @@ fun ClientDetailsScreen(
     onNavigateToSession: (String, String) -> Unit,
     onNavigateToStats: (String) -> Unit,
     onNavigateToMeasurements: (String) -> Unit,
-    onNavigateToClient: (String, String?, Int?) -> Unit, // Updated signature
+    onNavigateToClient: (String, String?, Int?) -> Unit,
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -92,14 +92,13 @@ fun ClientDetailsScreen(
     var addToFullRoutine by remember { mutableStateOf(false) }
 
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
-    var sessionToScheduleDay by remember { mutableStateOf<Int?>(null) } // New state for suggested day
+    var sessionToScheduleDay by remember { mutableStateOf<Int?>(null) }
 
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
     // Conflict State
     var conflictData by remember { mutableStateOf<ClientDetailsEvent.ShowConflictDialog?>(null) }
 
-    // Event Listener
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
@@ -117,7 +116,7 @@ fun ClientDetailsScreen(
 
                 is ClientDetailsEvent.OpenScheduleDialog -> {
                     sessionToSchedule = event.session
-                    sessionToScheduleDay = event.defaultDay // Capture suggested day
+                    sessionToScheduleDay = event.defaultDay
                 }
             }
         }
@@ -160,7 +159,6 @@ fun ClientDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (state.client != null) {
-                    // Measurements Button
                     SmallFloatingActionButton(
                         onClick = { onNavigateToMeasurements(state.client!!.id) },
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -169,7 +167,6 @@ fun ClientDetailsScreen(
                         Icon(Icons.Default.Straighten, contentDescription = "Measurements")
                     }
 
-                    // Stats Button
                     SmallFloatingActionButton(
                         onClick = { onNavigateToStats(state.client!!.id) },
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -204,7 +201,6 @@ fun ClientDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.sessions, key = { it.id }) { session ->
-                    // Dynamic Display Name
                     val displayName =
                         if (session.groupId != null && session.name.startsWith("Full Routine")) {
                             if (session.scheduledDay != null) {
@@ -236,8 +232,7 @@ fun ClientDetailsScreen(
                                         SessionAction.Delete -> viewModel.deleteSession(session)
                                         SessionAction.Schedule -> {
                                             sessionToSchedule = session
-                                            sessionToScheduleDay =
-                                                null // Reset suggestion for manual open
+                                            sessionToScheduleDay = null
                                         }
 
                                         SessionAction.ToggleSkip -> viewModel.toggleSkipSession(
@@ -264,7 +259,6 @@ fun ClientDetailsScreen(
 
         if (sessionToSchedule != null) {
             val clientName = state.client?.name ?: ""
-            // Use suggested day first, then existing schedule, then default to 1 (Mon)
             val defaultDay = sessionToScheduleDay ?: sessionToSchedule!!.scheduledDay ?: 1
 
             DartboardScheduleDialog(
@@ -274,6 +268,16 @@ fun ClientDetailsScreen(
                 globalOccupiedSlots = state.globalOccupiedSlots,
                 sessionToIgnoreId = sessionToSchedule!!.id,
                 onDismiss = {
+                    sessionToSchedule = null
+                    sessionToScheduleDay = null
+                },
+                onSkip = {
+                    viewModel.toggleSkipSession(sessionToSchedule!!)
+                    sessionToSchedule = null
+                    sessionToScheduleDay = null
+                },
+                onNextWeek = {
+                    viewModel.toggleSkipSession(sessionToSchedule!!)
                     sessionToSchedule = null
                     sessionToScheduleDay = null
                 },
