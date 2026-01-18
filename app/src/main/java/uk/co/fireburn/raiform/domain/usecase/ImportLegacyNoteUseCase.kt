@@ -1,5 +1,6 @@
 package uk.co.fireburn.raiform.domain.usecase
 
+import kotlinx.coroutines.flow.first
 import uk.co.fireburn.raiform.domain.model.BodyMeasurement
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
@@ -30,8 +31,21 @@ class ImportLegacyNoteUseCase @Inject constructor(
             repository.saveClient(newClient)
 
             // 3. Save Exercise Definitions (Body Parts)
-            parseResult.exerciseBodyParts.forEach { (name, bodyPart) ->
-                repository.saveExerciseDefinition(name, bodyPart)
+            // Check existing definitions first. If we already know the body part and the
+            // parser returned "Other" (default), keep the existing one.
+            val existingDefinitions = repository.getAllExerciseBodyParts().first()
+
+            parseResult.exerciseBodyParts.forEach { (name, parsedBodyPart) ->
+                val existingBodyPart = existingDefinitions[name]
+
+                // Use existing if available and parsed is generic "Other"
+                val finalBodyPart = if (existingBodyPart != null && parsedBodyPart == "Other") {
+                    existingBodyPart
+                } else {
+                    parsedBodyPart
+                }
+
+                repository.saveExerciseDefinition(name, finalBodyPart)
             }
 
             // 4. Save Sessions
@@ -39,12 +53,8 @@ class ImportLegacyNoteUseCase @Inject constructor(
                 repository.saveSession(session.copy(clientId = newClient.id))
             }
 
-            // 5. Save Measurements
+            // 5. Save Measurements (Flattened)
             if (parseResult.measurements.isNotEmpty()) {
-                // Consolidate into a single measurement entry for "today"
-                // The parser returns a list of raw (Type, Value).
-                // We need to map these types to the BodyMeasurement fields.
-
                 var weight: Double? = null
                 var waist: Double? = null
                 var chest: Double? = null

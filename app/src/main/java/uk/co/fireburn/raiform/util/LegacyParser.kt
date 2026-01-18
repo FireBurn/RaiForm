@@ -8,7 +8,7 @@ import java.util.UUID
 object LegacyParser {
 
     data class MeasurementRaw(
-        val type: String, // "Weight", "Waist", "Arm", etc.
+        val type: String,
         val value: Double
     )
 
@@ -19,43 +19,27 @@ object LegacyParser {
         val measurements: List<MeasurementRaw>
     )
 
-    /**
-     * Regex Breakdown (Standard):
-     * ^(.*?)\s+[-–—]\s+  -> Name + separator
-     * (bw|[\d\.]+)\s*    -> Weight
-     * ... sets x reps ...
-     */
     private val EXERCISE_REGEX = Regex(
         pattern = """^(.*?)\s+[-–—]\s+(bw|[\d\.]+)(?:kg|lbs)?\s*[xX*]\s*(\d+)\s*[xX*]\s*(\d+).*$""",
         option = RegexOption.IGNORE_CASE
     )
 
-    /**
-     * Fallback Regex for simple formats like "Sit up 50 reps"
-     * Group 1: Name
-     * Group 2: Reps
-     */
     private val SIMPLE_EXERCISE_REGEX = Regex(
         pattern = """^(.*?)\s+(\d+)\s*reps?$""",
         option = RegexOption.IGNORE_CASE
     )
 
-    /**
-     * Regex for Measurements
-     * Group 1: Type (Shoulder width, Arm, Waist, etc)
-     * Group 2: Value
-     */
     private val MEASUREMENT_REGEX = Regex(
         pattern = """^(Shoulder width|Shoulders?|Arms?|Waist|Chest|Legs?|Weight|Body Weight)\s+(\d+(?:\.\d+)?)$""",
         option = RegexOption.IGNORE_CASE
     )
 
-    // Body Parts to identify headers
+    // Explicit Body Part Headers
     private val BODY_PARTS = setOf(
         "CHEST", "LEGS", "SHOULDERS", "BICEPS", "TRICEPS", "BACK", "ABS", "ABS & CORE", "CARDIO"
     )
 
-    // Session Keywords (still used if user explicitly splits days)
+    // Session Keywords
     private val SESSION_KEYWORDS = listOf(
         "PUSH", "PULL", "LOWER", "UPPER", "FULL BODY", "DAY"
     )
@@ -64,7 +48,6 @@ object LegacyParser {
         val lines = rawText.lines().filter { it.isNotBlank() }
         if (lines.isEmpty()) throw IllegalArgumentException("Empty text provided")
 
-        // 1. First line is Client Name
         val clientName = lines.first().trim().toTitleCase()
 
         val sessions = mutableListOf<Session>()
@@ -73,15 +56,13 @@ object LegacyParser {
 
         var currentSessionName = "Imported Routine"
         var currentExercises = mutableListOf<Exercise>()
-        var currentBodyPart = "Other" // Default body part
+        var currentBodyPart = "Other"
 
-        // 2. Iterate
         for (i in 1 until lines.size) {
             val line = lines[i].trim()
             val lineUpper = line.uppercase()
 
             // A. Check for Body Part Header
-            // Exact match (case insensitive) against known list
             if (BODY_PARTS.contains(lineUpper)) {
                 currentBodyPart = line.toTitleCase()
                 continue
@@ -98,14 +79,12 @@ object LegacyParser {
                 continue
             }
 
-            // C. Check for Session Header (e.g. "Day 1", "Push")
-            // Only if it doesn't look like an exercise (no separator)
+            // C. Check for Session Header
             val isSessionHeader =
                 (SESSION_KEYWORDS.any { lineUpper.startsWith(it) } || line.endsWith(":"))
                         && !line.contains("-") && !SIMPLE_EXERCISE_REGEX.matches(line)
 
             if (isSessionHeader) {
-                // Save previous session
                 if (currentExercises.isNotEmpty()) {
                     sessions.add(
                         Session(
@@ -115,24 +94,39 @@ object LegacyParser {
                         )
                     )
                 }
-                // Start new session
                 currentSessionName = line.removeSuffix(":").toTitleCase()
                 currentExercises = mutableListOf()
-                // Reset body part for new session? Or keep?
-                // Usually keeps unless changed, but let's default back to Other if ambiguous
-                // For now, we keep previous body part context as user might list "Chest" then split days
+
+                // Smart Context: If header is "LOWER...", switch body part to Legs
+                if (lineUpper.contains("LOWER")) {
+                    currentBodyPart = "Legs"
+                } else if (lineUpper.contains("UPPER") || lineUpper.contains("PUSH") || lineUpper.contains(
+                        "PULL"
+                    )
+                ) {
+                    // Reset to "Other" for mixed days, forcing per-exercise guessing
+                    currentBodyPart = "Other"
+                }
             } else {
                 // D. Parse Exercise
                 val exercise = parseExerciseLine(line)
                 if (exercise != null) {
                     currentExercises.add(exercise)
-                    // Map this exercise name to the current body part
-                    exerciseBodyPartMap[exercise.name] = currentBodyPart
+
+                    // Determine Body Part
+                    // 1. Use the current header if specific (e.g. under "CHEST" or "LOWER")
+                    // 2. If generic ("Other"), try to guess from the name
+                    val determinedBodyPart = if (currentBodyPart == "Other") {
+                        guessBodyPart(exercise.name)
+                    } else {
+                        currentBodyPart
+                    }
+
+                    exerciseBodyPartMap[exercise.name] = determinedBodyPart
                 }
             }
         }
 
-        // Add final session
         if (currentExercises.isNotEmpty()) {
             sessions.add(
                 Session(
@@ -147,7 +141,6 @@ object LegacyParser {
     }
 
     private fun parseExerciseLine(line: String): Exercise? {
-        // Try Standard Format (Name - Weight x Sets x Reps)
         var match = EXERCISE_REGEX.find(line)
         if (match != null) {
             val (name, weightStr, setsStr, repsStr) = match.destructured
@@ -166,7 +159,6 @@ object LegacyParser {
             )
         }
 
-        // Try Simple Format (Name 50 reps)
         match = SIMPLE_EXERCISE_REGEX.find(line)
         if (match != null) {
             val (name, repsStr) = match.destructured
@@ -181,6 +173,72 @@ object LegacyParser {
 
         return null
     }
+
+    private fun guessBodyPart(name: String): String {
+        val n = name.lowercase()
+        return when {
+            n.containsAny(
+                "squat",
+                "leg",
+                "lunge",
+                "calf",
+                "hamstring",
+                "quad",
+                "glute",
+                "split",
+                "deadlift",
+                "hip thrust",
+                "abduction"
+            ) -> "Legs"
+
+            n.containsAny(
+                "bench",
+                "chest",
+                "fly",
+                "pec",
+                "push up",
+                "press"
+            ) && !n.contains("leg") && !n.contains("shoulder") && !n.contains("overhead") -> "Chest"
+
+            n.containsAny(
+                "pull up",
+                "pull down",
+                "row",
+                "lat",
+                "chin up",
+                "back",
+                "rack pull"
+            ) -> "Back"
+
+            n.containsAny(
+                "shoulder",
+                "delts",
+                "raise",
+                "face pull",
+                "overhead",
+                "military",
+                "arnold",
+                "clean"
+            ) -> "Shoulders"
+
+            n.containsAny("curl", "bicep", "hammer", "preacher") -> "Biceps"
+            n.containsAny(
+                "tricep",
+                "extension",
+                "skull",
+                "dip",
+                "pushdown",
+                "kickback"
+            ) -> "Triceps"
+
+            n.containsAny("abs", "core", "plank", "crunch", "sit up", "leg raise") -> "Abs & Core"
+            n.containsAny("run", "cardio", "treadmill", "bike", "rowing", "elliptical") -> "Cardio"
+            else -> "Other"
+        }
+    }
+
+    private fun String.containsAny(vararg keywords: String): Boolean =
+        keywords.any { this.contains(it) }
 
     private fun String.toTitleCase(): String {
         return this.lowercase().split(" ").joinToString(" ") { word ->
