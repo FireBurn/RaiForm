@@ -80,8 +80,8 @@ fun ClientDetailsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSession: (String, String) -> Unit,
     onNavigateToStats: (String) -> Unit,
-    onNavigateToMeasurements: (String) -> Unit, // New navigation callback
-    onNavigateToClient: (String, String?) -> Unit,
+    onNavigateToMeasurements: (String) -> Unit,
+    onNavigateToClient: (String, String?, Int?) -> Unit, // Updated signature
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -92,6 +92,8 @@ fun ClientDetailsScreen(
     var addToFullRoutine by remember { mutableStateOf(false) }
 
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
+    var sessionToScheduleDay by remember { mutableStateOf<Int?>(null) } // New state for suggested day
+
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
     // Conflict State
@@ -110,11 +112,12 @@ fun ClientDetailsScreen(
                 }
 
                 is ClientDetailsEvent.NavigateToClient -> {
-                    onNavigateToClient(event.clientId, event.sessionId)
+                    onNavigateToClient(event.clientId, event.sessionId, event.day)
                 }
 
                 is ClientDetailsEvent.OpenScheduleDialog -> {
                     sessionToSchedule = event.session
+                    sessionToScheduleDay = event.defaultDay // Capture suggested day
                 }
             }
         }
@@ -188,7 +191,6 @@ fun ClientDetailsScreen(
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
         } else {
-            // Calculate indices for "Full Routine 1", "Full Routine 2" etc.
             val fullRoutineSessions =
                 state.sessions.filter { it.groupId != null && it.name.startsWith("Full Routine") }
 
@@ -198,12 +200,11 @@ fun ClientDetailsScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(horizontal = 16.dp),
-                // Allow overscroll so FAB doesn't cover bottom items
                 contentPadding = PaddingValues(bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.sessions, key = { it.id }) { session ->
-                    // Dynamic Display Name Logic
+                    // Dynamic Display Name
                     val displayName =
                         if (session.groupId != null && session.name.startsWith("Full Routine")) {
                             if (session.scheduledDay != null) {
@@ -223,7 +224,7 @@ fun ClientDetailsScreen(
 
                         Box(modifier = Modifier.shadow(elevation.value)) {
                             SessionCard(
-                                session = session.copy(name = displayName), // Use dynamic name for display
+                                session = session.copy(name = displayName),
                                 onClick = {
                                     if (state.client != null) {
                                         onNavigateToSession(state.client!!.id, session.id)
@@ -233,7 +234,12 @@ fun ClientDetailsScreen(
                                     when (action) {
                                         SessionAction.Rename -> sessionToRename = session
                                         SessionAction.Delete -> viewModel.deleteSession(session)
-                                        SessionAction.Schedule -> sessionToSchedule = session
+                                        SessionAction.Schedule -> {
+                                            sessionToSchedule = session
+                                            sessionToScheduleDay =
+                                                null // Reset suggestion for manual open
+                                        }
+
                                         SessionAction.ToggleSkip -> viewModel.toggleSkipSession(
                                             session
                                         )
@@ -257,16 +263,24 @@ fun ClientDetailsScreen(
         // --- Dialogs ---
 
         if (sessionToSchedule != null) {
+            val clientName = state.client?.name ?: ""
+            // Use suggested day first, then existing schedule, then default to 1 (Mon)
+            val defaultDay = sessionToScheduleDay ?: sessionToSchedule!!.scheduledDay ?: 1
+
             DartboardScheduleDialog(
-                title = "Schedule: ${sessionToSchedule!!.name}",
-                currentDay = sessionToSchedule!!.scheduledDay ?: 1,
+                title = "Reschedule $clientName: ${sessionToSchedule!!.name}",
+                currentDay = defaultDay,
                 currentHour = sessionToSchedule!!.scheduledHour ?: -1,
                 globalOccupiedSlots = state.globalOccupiedSlots,
                 sessionToIgnoreId = sessionToSchedule!!.id,
-                onDismiss = { sessionToSchedule = null },
+                onDismiss = {
+                    sessionToSchedule = null
+                    sessionToScheduleDay = null
+                },
                 onSave = { d, h ->
                     viewModel.tryUpdateSchedule(sessionToSchedule!!, d, h)
                     sessionToSchedule = null
+                    sessionToScheduleDay = null
                 }
             )
         }
@@ -367,6 +381,7 @@ fun ClientDetailsScreen(
     }
 }
 
+// ... SessionCard is unchanged
 @Composable
 fun SessionCard(
     session: Session,

@@ -20,7 +20,11 @@ import uk.co.fireburn.raiform.ui.screens.stats.ClientStatsScreen
 object Dashboard
 
 @Serializable
-data class ClientDetails(val clientId: String, val rescheduleSessionId: String? = null)
+data class ClientDetails(
+    val clientId: String,
+    val rescheduleSessionId: String? = null,
+    val rescheduleDay: Int? = null // New parameter for conflict resolution
+)
 
 @Serializable
 data class ActiveSession(val clientId: String, val sessionId: String)
@@ -75,8 +79,9 @@ fun AppNavigation(
                 onNavigateToMeasurements = { clientId ->
                     navController.navigate(Measurements(clientId))
                 },
-                onNavigateToClient = { clientId, sessionId ->
-                    navController.navigate(ClientDetails(clientId, sessionId))
+                onNavigateToClient = { clientId, sessionId, day ->
+                    // Pass day if available
+                    navController.navigate(ClientDetails(clientId, sessionId, day))
                 }
             )
         }

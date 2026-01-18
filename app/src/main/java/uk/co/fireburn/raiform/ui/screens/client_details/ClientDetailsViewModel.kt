@@ -40,13 +40,22 @@ sealed class ClientDetailsEvent {
     ) : ClientDetailsEvent()
 
     data class ShowMessage(val message: String) : ClientDetailsEvent()
-    data class NavigateToClient(val clientId: String, val sessionId: String?) : ClientDetailsEvent()
-    data class OpenScheduleDialog(val session: Session) : ClientDetailsEvent()
+
+    // Updated: Pass optional day for auto-selection
+    data class NavigateToClient(
+        val clientId: String,
+        val sessionId: String?,
+        val day: Int? = null
+    ) : ClientDetailsEvent()
+
+    // Updated: Pass optional day for dialog
+    data class OpenScheduleDialog(val session: Session, val defaultDay: Int? = null) :
+        ClientDetailsEvent()
 }
 
 @HiltViewModel
 class ClientDetailsViewModel @Inject constructor(
-    private val savedStateHandle: SavedStateHandle, // Accessed directly for logic
+    private val savedStateHandle: SavedStateHandle,
     private val repository: RaiRepository,
     private val manageSessionUseCase: ManageSessionUseCase,
     private val weeklyResetUseCase: WeeklyResetUseCase
@@ -87,15 +96,24 @@ class ClientDetailsViewModel @Inject constructor(
                 }
 
                 // Check for Auto-Reschedule Link
-                // We check if "rescheduleSessionId" was passed in navigation
                 val targetSessionId = savedStateHandle.get<String>("rescheduleSessionId")
+                // New: Get the day to auto-select
+                val rescheduleDay = savedStateHandle.get<Int>("rescheduleDay")
+
                 if (targetSessionId != null) {
                     val targetSession = processedSessions.find { it.id == targetSessionId }
                     if (targetSession != null) {
-                        // Trigger UI to open dialog immediately
-                        _events.emit(ClientDetailsEvent.OpenScheduleDialog(targetSession))
+                        // Trigger UI to open dialog immediately with the previous day pre-selected
+                        _events.emit(
+                            ClientDetailsEvent.OpenScheduleDialog(
+                                targetSession,
+                                rescheduleDay
+                            )
+                        )
+
                         // Clear state so it doesn't happen again on rotation
                         savedStateHandle["rescheduleSessionId"] = null
+                        savedStateHandle["rescheduleDay"] = null
                     }
                 }
             }
@@ -104,7 +122,6 @@ class ClientDetailsViewModel @Inject constructor(
 
     private fun loadGlobalSchedule() {
         viewModelScope.launch {
-            // Combine sessions with active clients to filter out orphans (phantom data)
             combine(
                 repository.getAllSessions(),
                 repository.getActiveClients()
@@ -127,7 +144,7 @@ class ClientDetailsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         globalOccupiedSlots = map,
-                        allGlobalSessions = validSessions // Only store valid ones for conflict detection
+                        allGlobalSessions = validSessions
                     )
                 }
             }
@@ -138,7 +155,7 @@ class ClientDetailsViewModel @Inject constructor(
 
     fun tryUpdateSchedule(session: Session, day: Int, hour: Int) {
         viewModelScope.launch {
-            // Check for conflict (using the filtered list of valid sessions)
+            // Check for conflict
             val conflict = _uiState.value.allGlobalSessions.find {
                 it.scheduledDay == day &&
                         it.scheduledHour == hour &&
@@ -151,7 +168,6 @@ class ClientDetailsViewModel @Inject constructor(
                 val ownerClient = repository.getClient(conflict.clientId).first()
                 val ownerName = ownerClient?.name ?: "Unknown"
 
-                // Trigger Dialog in UI
                 _events.emit(
                     ClientDetailsEvent.ShowConflictDialog(
                         conflictName = ownerName,
@@ -162,7 +178,6 @@ class ClientDetailsViewModel @Inject constructor(
                     )
                 )
             } else {
-                // No conflict, just save
                 manageSessionUseCase.updateSchedule(clientId, session, day, hour, 0)
                 _events.emit(ClientDetailsEvent.ShowMessage("Scheduled!"))
             }
@@ -176,6 +191,9 @@ class ClientDetailsViewModel @Inject constructor(
         hour: Int
     ) {
         viewModelScope.launch {
+            // 0. Capture the original day BEFORE bumping
+            val previousDay = conflictingSession.scheduledDay
+
             // 1. Bump the conflicting session (Unschedule it)
             val bumped = conflictingSession.copy(
                 scheduledDay = null, scheduledHour = null, scheduledMinute = null
@@ -191,14 +209,14 @@ class ClientDetailsViewModel @Inject constructor(
                 _events.emit(
                     ClientDetailsEvent.NavigateToClient(
                         conflictingSession.clientId,
-                        conflictingSession.id
+                        conflictingSession.id,
+                        previousDay // Pass the original day
                     )
                 )
             } else {
                 _events.emit(ClientDetailsEvent.ShowMessage("Swapped successfully."))
-                // If same client, we could optionally open the dialog for the bumped session here too
-                // but usually the UI list updates and it moves to "Unscheduled"
-                _events.emit(ClientDetailsEvent.OpenScheduleDialog(bumped))
+                // Same client? Re-open dialog for the bumped session with previous day
+                _events.emit(ClientDetailsEvent.OpenScheduleDialog(bumped, previousDay))
             }
         }
     }
