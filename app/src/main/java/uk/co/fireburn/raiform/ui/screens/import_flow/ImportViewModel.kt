@@ -20,7 +20,7 @@ data class ImportUiState(
     val rawText: String = "",
     val parsedClientName: String? = null,
     val parsedSessions: List<Session> = emptyList(),
-    val measurementCount: Int = 0, // Visual feedback for measurements
+    val measurementCount: Int = 0,
     val sessionFrequency: Int = 1,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -136,7 +136,8 @@ class ImportViewModel @Inject constructor(
                     val groupId = UUID.randomUUID().toString()
 
                     for (i in 1..frequency) {
-                        val sessionName = "Session $i"
+                        val sessionName = "Full Routine Session"
+
                         val newSession = baseSession.copy(
                             id = UUID.randomUUID().toString(),
                             clientId = client.id,

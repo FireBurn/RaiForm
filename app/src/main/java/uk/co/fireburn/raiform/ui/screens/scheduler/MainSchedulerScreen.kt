@@ -113,7 +113,7 @@ fun MainSchedulerScreen(
                 ) {
                     val highlightColor = MaterialTheme.colorScheme.primaryContainer
 
-                    // --- Client Dropdown with Pulse ---
+                    // --- Client Dropdown ---
                     val clientPulse =
                         remember { androidx.compose.animation.Animatable(Color.Transparent) }
                     LaunchedEffect(state.selectedClient) {
@@ -159,7 +159,7 @@ fun MainSchedulerScreen(
                         }
                     }
 
-                    // --- Session Dropdown with Pulse ---
+                    // --- Session Dropdown ---
                     val sessionPulse =
                         remember { androidx.compose.animation.Animatable(Color.Transparent) }
                     LaunchedEffect(state.selectedSession) {
@@ -274,7 +274,7 @@ fun MainSchedulerScreen(
                     }
                 }
 
-                // 5. SECONDARY ACTIONS
+                // 5. SECONDARY ACTIONS (SKIP / NEXT WEEK) - Explicitly restored
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -287,7 +287,8 @@ fun MainSchedulerScreen(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.error
-                        )
+                        ),
+                        enabled = state.selectedSession != null
                     ) {
                         Icon(Icons.Default.Cancel, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -302,7 +303,8 @@ fun MainSchedulerScreen(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        ),
+                        enabled = state.selectedSession != null
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.NextWeek,

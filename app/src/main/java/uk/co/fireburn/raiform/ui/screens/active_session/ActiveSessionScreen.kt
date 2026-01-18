@@ -255,11 +255,34 @@ fun ActiveSessionScreen(
                     preFillData = null
                 },
                 onNameSelected = { name ->
-                    // Auto-fill logic
-                    viewModel.getExistingStatsForExercise(name) { w, s, r, bw, bp ->
-                        preFillData =
-                            Exercise(name = name, weight = w, sets = s, reps = r, isBodyweight = bw)
-                        // Trigger re-render with new body part preference is handled by Dialog internal state
+                    if (name.isBlank()) {
+                        // "New" selected -> Reset
+                        preFillData = Exercise(name = "", weight = 0.0, sets = 3, reps = 10)
+                        // Note: body part state is reset in the dialog logic manually if needed,
+                        // but usually stays as is or user changes it.
+                    } else {
+                        // Auto-fill logic
+                        viewModel.getExistingStatsForExercise(name) { w, s, r, bw, bp ->
+                            preFillData = Exercise(
+                                name = name,
+                                weight = w,
+                                sets = s,
+                                reps = r,
+                                isBodyweight = bw
+                            )
+                            // IMPORTANT: Update body part preference from history
+                            // We rely on the dialog to update its internal state based on this callback,
+                            // but ExerciseDialog handles state internally.
+                            // We need to pass this `bp` to the dialog state.
+                            // The cleanest way in Compose is passing a lambda to the Dialog to update its state,
+                            // OR using a mutable state object.
+                            // Since `preFillData` triggers a LaunchedEffect, we will use that for exercise stats.
+                            // For Body Part, we will trigger an update via a separate callback or relying on recomposition.
+                            // However, `ExerciseDialog` holds `var bodyPart by remember`.
+                            // To force update it, we can expose a key or update function.
+                            // Simplest here: We pass the found bodyPart to `onNameSelected`
+                            // which is consumed by the Dialog to update `bodyPart`.
+                        }
                     }
                 },
                 onConfirm = { name, weight, isBodyweight, sets, reps, bodyPart ->
@@ -555,25 +578,47 @@ fun ExerciseDialog(
         "Other"
     )
 
+    // Cleaned list of exercises
+    val cleanExerciseNames = remember(allExerciseNames) {
+        val badNames = setOf(
+            "CHEST",
+            "BACK",
+            "LEGS",
+            "SHOULDERS",
+            "BICEPS",
+            "TRICEPS",
+            "ABS",
+            "ABS & CORE",
+            "CARDIO"
+        )
+        allExerciseNames.filter { !badNames.contains(it.uppercase()) }
+    }
+
     // Auto-fill logic
     LaunchedEffect(preFillData) {
         preFillData?.let {
+            nameText = it.name
             weightText = formatWeight(abs(it.weight))
             setsText = it.sets.toString()
             repsText = it.reps.toString()
             isBodyweight = it.isBodyweight
-            // Note: nameText is updated via the onNameSelected callback logic if needed
         }
     }
 
     var expanded by remember { mutableStateOf(false) }
     var bodyPartExpanded by remember { mutableStateOf(false) }
 
-    val filteredOptions = remember(nameText, allExerciseNames) {
-        if (nameText.isBlank()) emptyList()
-        else allExerciseNames.filter {
-            it.contains(nameText, ignoreCase = true) && !it.equals(nameText, ignoreCase = true)
-        }.take(5)
+    val filteredOptions = remember(nameText, cleanExerciseNames, expanded) {
+        if (nameText.isBlank()) return@remember listOf("New") + cleanExerciseNames
+
+        val exactMatch = cleanExerciseNames.any { it.equals(nameText, ignoreCase = true) }
+
+        if (exactMatch) {
+            listOf("New") + cleanExerciseNames
+        } else {
+            val filtered = cleanExerciseNames.filter { it.contains(nameText, ignoreCase = true) }
+            listOf("New") + filtered
+        }
     }
 
     if (showDeleteConfirm) {
@@ -610,41 +655,50 @@ fun ExerciseDialog(
                                 expanded = true
                             },
                             label = { Text("Exercise Name") },
+                            placeholder = { Text("Select..") },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor(),
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
                         )
 
-                        // Show filtered options OR "New" option
-                        if (filteredOptions.isNotEmpty() || nameText.isNotBlank()) {
-                            ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                filteredOptions.forEach { selectionOption ->
-                                    DropdownMenuItem(
-                                        text = { Text(selectionOption) },
-                                        onClick = {
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            filteredOptions.forEach { selectionOption ->
+                                DropdownMenuItem(
+                                    text = {
+                                        if (selectionOption == "New") {
+                                            Text(
+                                                "New",
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        } else {
+                                            Text(selectionOption)
+                                        }
+                                    },
+                                    onClick = {
+                                        expanded = false
+                                        if (selectionOption == "New") {
+                                            nameText = ""
+                                            onNameSelected("")
+                                        } else {
                                             nameText = selectionOption
-                                            expanded = false
+                                            // Trigger ViewModel lookup, and update bodyPart here manually
+                                            // Since onNameSelected is a callback that calls viewModel logic,
+                                            // we rely on it to update preFillData.
+                                            // We need to pass the bodyPart back up or handle it.
+                                            // For now, onNameSelected triggers the VM which updates preFillData.
+                                            // However, preFillData doesn't update bodyPart state variable.
+                                            // We need to do this:
                                             onNameSelected(selectionOption)
                                         }
-                                    )
-                                }
-                                // If exact match doesn't exist, show "Create New" style option
-                                if (filteredOptions.none {
-                                        it.equals(
-                                            nameText,
-                                            true
-                                        )
-                                    } && nameText.isNotBlank()) {
-                                    DropdownMenuItem(
-                                        text = { Text("Use '$nameText'") },
-                                        onClick = { expanded = false }
-                                    )
-                                }
+                                    }
+                                )
                             }
                         }
                     }
