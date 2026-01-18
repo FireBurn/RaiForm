@@ -104,18 +104,30 @@ class ClientDetailsViewModel @Inject constructor(
 
     private fun loadGlobalSchedule() {
         viewModelScope.launch {
-            repository.getAllSessions().collect { allSessions ->
+            // Combine sessions with active clients to filter out orphans (phantom data)
+            combine(
+                repository.getAllSessions(),
+                repository.getActiveClients()
+            ) { sessions, clients ->
+                sessions to clients
+            }.collect { (allSessions, activeClients) ->
+                val activeClientIds = activeClients.map { it.id }.toSet()
                 val map = mutableMapOf<Int, MutableList<Int>>()
-                allSessions.forEach { session ->
+
+                // Filter sessions: Only include if the client ID exists in the Active list
+                val validSessions = allSessions.filter { activeClientIds.contains(it.clientId) }
+
+                validSessions.forEach { session ->
                     if (session.scheduledDay != null && session.scheduledHour != null && !session.isSkippedThisWeek) {
                         val list = map.getOrPut(session.scheduledDay) { mutableListOf() }
                         list.add(session.scheduledHour)
                     }
                 }
+
                 _uiState.update {
                     it.copy(
                         globalOccupiedSlots = map,
-                        allGlobalSessions = allSessions
+                        allGlobalSessions = validSessions // Only store valid ones for conflict detection
                     )
                 }
             }
@@ -126,7 +138,7 @@ class ClientDetailsViewModel @Inject constructor(
 
     fun tryUpdateSchedule(session: Session, day: Int, hour: Int) {
         viewModelScope.launch {
-            // Check for conflict
+            // Check for conflict (using the filtered list of valid sessions)
             val conflict = _uiState.value.allGlobalSessions.find {
                 it.scheduledDay == day &&
                         it.scheduledHour == hour &&

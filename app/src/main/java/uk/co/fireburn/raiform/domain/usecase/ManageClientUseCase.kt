@@ -23,6 +23,9 @@ class ManageClientUseCase @Inject constructor(
     }
 
     suspend fun archiveClient(client: Client) {
+        // 1. Unschedule all their sessions so they don't block the Dartboard
+        repository.unscheduleSessionsForClient(client.id)
+        // 2. Mark client as Removed
         repository.archiveClient(client.id)
     }
 
@@ -31,6 +34,9 @@ class ManageClientUseCase @Inject constructor(
     }
 
     suspend fun deleteClient(client: Client) {
+        // 1. Mark all their sessions as deleted so they don't appear anywhere
+        repository.softDeleteSessionsForClient(client.id)
+        // 2. Mark client as deleted
         repository.deleteClient(client.id)
     }
 

@@ -54,6 +54,14 @@ interface SessionDao {
     @Query("UPDATE sessions SET isDeleted = 1, lastSyncTimestamp = :timestamp WHERE id = :sessionId")
     suspend fun softDeleteSession(sessionId: String, timestamp: Long)
 
+    // Soft delete all sessions for a specific client (used when deleting a client)
+    @Query("UPDATE sessions SET isDeleted = 1, lastSyncTimestamp = :timestamp WHERE clientId = :clientId")
+    suspend fun softDeleteSessionsForClient(clientId: String, timestamp: Long)
+
+    // Unschedule all sessions for a specific client (used when archiving)
+    @Query("UPDATE sessions SET scheduledDay = NULL, scheduledHour = NULL, scheduledMinute = NULL, lastSyncTimestamp = :timestamp WHERE clientId = :clientId")
+    suspend fun unscheduleSessionsForClient(clientId: String, timestamp: Long)
+
     @Query("DELETE FROM sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)
 

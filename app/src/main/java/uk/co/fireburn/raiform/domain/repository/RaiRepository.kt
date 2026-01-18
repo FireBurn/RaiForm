@@ -32,13 +32,10 @@ interface RaiRepository {
 
     fun getAllSessions(): Flow<List<Session>>
 
-    // Fetch linked sessions (Required for smart import replication & linked completion)
     suspend fun getSessionsByGroup(clientId: String, groupId: String): List<Session>
 
-    // Exercise name autocomplete
     fun getAllExerciseNames(): Flow<List<String>>
 
-    // Helper to find previous stats
     suspend fun findExerciseStats(clientId: String, exerciseName: String): Triple<Double, Int, Int>?
 
     suspend fun saveSession(session: Session)
@@ -47,25 +44,18 @@ interface RaiRepository {
 
     suspend fun deleteSession(sessionId: String)
 
-    // --- Exercise Definitions (Body Parts & Global Rename) ---
+    // Cleanup methods for client lifecycle
+    suspend fun unscheduleSessionsForClient(clientId: String)
+    suspend fun softDeleteSessionsForClient(clientId: String)
 
-    /**
-     * Saves or updates the body part mapping for a specific exercise name.
-     */
+    // --- Exercise Definitions ---
     suspend fun saveExerciseDefinition(name: String, bodyPart: String)
 
-    /**
-     * Returns a map of Exercise Name -> Body Part.
-     */
     fun getAllExerciseBodyParts(): Flow<Map<String, String>>
 
-    /**
-     * Renames an exercise globally across all templates and definitions.
-     */
     suspend fun renameExerciseGlobally(oldName: String, newName: String)
 
     // --- Body Measurements ---
-
     fun getBodyMeasurements(clientId: String): Flow<List<BodyMeasurement>>
 
     suspend fun saveBodyMeasurement(measurement: BodyMeasurement)
@@ -79,6 +69,6 @@ interface RaiRepository {
 
     suspend fun logHistory(log: HistoryLog)
 
-    // --- Sync & Data Management ---
+    // --- Sync ---
     suspend fun sync()
 }

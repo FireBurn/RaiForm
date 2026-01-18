@@ -258,6 +258,7 @@ fun ClientDetailsScreen(
 
         if (sessionToSchedule != null) {
             DartboardScheduleDialog(
+                title = "Schedule: ${sessionToSchedule!!.name}",
                 currentDay = sessionToSchedule!!.scheduledDay ?: 1,
                 currentHour = sessionToSchedule!!.scheduledHour ?: -1,
                 globalOccupiedSlots = state.globalOccupiedSlots,

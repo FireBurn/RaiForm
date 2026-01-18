@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
@@ -33,6 +34,7 @@ import java.util.Locale
 
 @Composable
 fun DartboardScheduleDialog(
+    title: String,
     currentDay: Int,
     currentHour: Int,
     globalOccupiedSlots: Map<Int, List<Int>>,
@@ -52,7 +54,13 @@ fun DartboardScheduleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Schedule Session") },
+        title = {
+            Text(
+                text = title,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // Day Selector Row

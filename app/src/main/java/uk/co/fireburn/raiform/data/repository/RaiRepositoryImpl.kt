@@ -192,6 +192,14 @@ class RaiRepositoryImpl @Inject constructor(
         sessionDao.softDeleteSession(sessionId, System.currentTimeMillis())
     }
 
+    override suspend fun unscheduleSessionsForClient(clientId: String) {
+        sessionDao.unscheduleSessionsForClient(clientId, System.currentTimeMillis())
+    }
+
+    override suspend fun softDeleteSessionsForClient(clientId: String) {
+        sessionDao.softDeleteSessionsForClient(clientId, System.currentTimeMillis())
+    }
+
     // --- Exercise Definitions (Global Body Parts) ---
 
     override suspend fun saveExerciseDefinition(name: String, bodyPart: String) {
