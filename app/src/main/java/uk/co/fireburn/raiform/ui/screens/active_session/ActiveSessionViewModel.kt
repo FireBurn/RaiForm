@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,7 +29,9 @@ data class ActiveSessionUiState(
     val timerValue: Int = 60,
     val timerTotalTime: Int = 60,
     val isTimerRunning: Boolean = false,
-    val allExerciseNames: List<String> = emptyList()
+    val allExerciseNames: List<String> = emptyList(),
+    // Map of Exercise Name -> Body Part (e.g. "Bench Press" -> "Chest")
+    val exerciseBodyParts: Map<String, String> = emptyMap()
 )
 
 @HiltViewModel
@@ -50,34 +53,53 @@ class ActiveSessionViewModel @Inject constructor(
     private var timerJob: Job? = null
 
     init {
-        loadSession()
-        loadExerciseNames()
+        loadData()
     }
 
-    private fun loadSession() {
+    private fun loadData() {
         viewModelScope.launch {
-            repository.getSession(sessionId).collect { session ->
-                _uiState.update { it.copy(session = session, isLoading = false) }
+            // Combine session data, autocomplete names, and body part definitions
+            combine(
+                repository.getSession(sessionId),
+                repository.getAllExerciseNames(),
+                repository.getAllExerciseBodyParts()
+            ) { session, names, bodyParts ->
+                Triple(session, names, bodyParts)
+            }.collect { (session, names, bodyParts) ->
+                // Sort session exercises alphabetically (will be grouped by body part in UI)
+                val sortedSession = session?.copy(
+                    exercises = session.exercises.sortedBy { it.name }
+                )
+
+                _uiState.update {
+                    it.copy(
+                        session = sortedSession,
+                        allExerciseNames = names,
+                        exerciseBodyParts = bodyParts,
+                        isLoading = false
+                    )
+                }
             }
         }
     }
 
-    private fun loadExerciseNames() {
-        viewModelScope.launch {
-            repository.getAllExerciseNames().collect { names ->
-                _uiState.update { it.copy(allExerciseNames = names) }
-            }
-        }
-    }
-
-    // NEW: Fetch existing stats to pre-fill the dialog
-    fun getExistingStatsForExercise(name: String, callback: (Double, Int, Int, Boolean) -> Unit) {
+    // Fetch existing stats AND body part to pre-fill the dialog
+    fun getExistingStatsForExercise(
+        name: String,
+        callback: (Double, Int, Int, Boolean, String) -> Unit
+    ) {
         viewModelScope.launch {
             val stats = repository.findExerciseStats(clientId, name)
+            // Look up body part in current state map, default to "Other"
+            val bodyPart = _uiState.value.exerciseBodyParts[name] ?: "Other"
+
             if (stats != null) {
                 val (weight, sets, reps) = stats
                 val isBw = (weight == 0.0)
-                callback(weight, sets, reps, isBw)
+                callback(weight, sets, reps, isBw, bodyPart)
+            } else {
+                // If no stats, still return the body part if we know it
+                callback(0.0, 3, 10, false, bodyPart)
             }
         }
     }
@@ -120,7 +142,7 @@ class ActiveSessionViewModel @Inject constructor(
         _uiState.update { it.copy(isTimerRunning = false) }
     }
 
-    // --- Existing Logic ---
+    // --- Session Management ---
 
     fun toggleExerciseDone(exerciseId: String) {
         val currentSession = _uiState.value.session ?: return
@@ -136,7 +158,14 @@ class ActiveSessionViewModel @Inject constructor(
         }
     }
 
-    fun addExercise(name: String, weight: Double, isBodyweight: Boolean, sets: Int, reps: Int) {
+    fun addExercise(
+        name: String,
+        weight: Double,
+        isBodyweight: Boolean,
+        sets: Int,
+        reps: Int,
+        bodyPart: String
+    ) {
         val currentSession = _uiState.value.session ?: return
         viewModelScope.launch {
             manageSessionUseCase.addExercise(
@@ -146,7 +175,8 @@ class ActiveSessionViewModel @Inject constructor(
                 weight,
                 isBodyweight,
                 sets,
-                reps
+                reps,
+                bodyPart
             )
         }
     }
@@ -157,7 +187,8 @@ class ActiveSessionViewModel @Inject constructor(
         newWeight: Double,
         isBodyweight: Boolean,
         newSets: Int,
-        newReps: Int
+        newReps: Int,
+        bodyPart: String
     ) {
         val currentSession = _uiState.value.session ?: return
         viewModelScope.launch {
@@ -169,7 +200,8 @@ class ActiveSessionViewModel @Inject constructor(
                 newWeight,
                 isBodyweight,
                 newSets,
-                newReps
+                newReps,
+                bodyPart
             )
         }
     }

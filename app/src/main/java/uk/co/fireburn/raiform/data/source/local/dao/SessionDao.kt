@@ -74,6 +74,10 @@ interface SessionDao {
     @Query("SELECT * FROM exercise_templates WHERE id = :templateId")
     suspend fun getTemplateById(templateId: String): ExerciseTemplateEntity?
 
+    // Global Rename: Updates the name in all templates across the app
+    @Query("UPDATE exercise_templates SET name = :newName WHERE name = :oldName")
+    suspend fun updateExerciseNameGlobally(oldName: String, newName: String)
+
     // For Auto-complete Dropdown
     @Query("SELECT DISTINCT name FROM exercise_templates ORDER BY name ASC")
     fun getAllExerciseNames(): Flow<List<String>>

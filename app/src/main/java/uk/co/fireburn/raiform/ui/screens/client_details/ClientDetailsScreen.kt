@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,11 +27,13 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -77,6 +80,7 @@ fun ClientDetailsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSession: (String, String) -> Unit,
     onNavigateToStats: (String) -> Unit,
+    onNavigateToMeasurements: (String) -> Unit, // New navigation callback
     onNavigateToClient: (String, String?) -> Unit,
     viewModel: ClientDetailsViewModel = hiltViewModel()
 ) {
@@ -85,6 +89,8 @@ fun ClientDetailsScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
+    var addToFullRoutine by remember { mutableStateOf(false) }
+
     var sessionToSchedule by remember { mutableStateOf<Session?>(null) }
     var sessionToRename by remember { mutableStateOf<Session?>(null) }
 
@@ -151,6 +157,16 @@ fun ClientDetailsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (state.client != null) {
+                    // Measurements Button
+                    SmallFloatingActionButton(
+                        onClick = { onNavigateToMeasurements(state.client!!.id) },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ) {
+                        Icon(Icons.Default.Straighten, contentDescription = "Measurements")
+                    }
+
+                    // Stats Button
                     SmallFloatingActionButton(
                         onClick = { onNavigateToStats(state.client!!.id) },
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -172,21 +188,42 @@ fun ClientDetailsScreen(
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
         } else {
+            // Calculate indices for "Full Routine 1", "Full Routine 2" etc.
+            val fullRoutineSessions =
+                state.sessions.filter { it.groupId != null && it.name.startsWith("Full Routine") }
+
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp),
+                // Allow overscroll so FAB doesn't cover bottom items
+                contentPadding = PaddingValues(bottom = 120.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.sessions, key = { it.id }) { session ->
+                    // Dynamic Display Name Logic
+                    val displayName =
+                        if (session.groupId != null && session.name.startsWith("Full Routine")) {
+                            if (session.scheduledDay != null) {
+                                val dayName = DayOfWeek.of(session.scheduledDay)
+                                    .getDisplayName(TextStyle.FULL, Locale.getDefault())
+                                "Full Routine $dayName"
+                            } else {
+                                val index = fullRoutineSessions.indexOf(session) + 1
+                                "Full Routine $index"
+                            }
+                        } else {
+                            session.name
+                        }
+
                     ReorderableItem(reorderableState, key = session.id) { isDragging ->
                         val elevation = animateDpAsState(if (isDragging) 8.dp else 0.dp)
 
                         Box(modifier = Modifier.shadow(elevation.value)) {
                             SessionCard(
-                                session = session,
+                                session = session.copy(name = displayName), // Use dynamic name for display
                                 onClick = {
                                     if (state.client != null) {
                                         onNavigateToSession(state.client!!.id, session.id)
@@ -214,7 +251,6 @@ fun ClientDetailsScreen(
                         }
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) }
             }
         }
 
@@ -265,18 +301,32 @@ fun ClientDetailsScreen(
                 onDismissRequest = { showAddDialog = false },
                 title = { Text("New Session") },
                 text = {
-                    OutlinedTextField(
-                        value = newSessionName,
-                        onValueChange = { newSessionName = it },
-                        label = { Text("Session Name") },
-                        singleLine = true
-                    )
+                    Column {
+                        OutlinedTextField(
+                            value = newSessionName,
+                            onValueChange = { newSessionName = it },
+                            label = { Text("Session Name") },
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { addToFullRoutine = !addToFullRoutine }
+                        ) {
+                            Checkbox(
+                                checked = addToFullRoutine,
+                                onCheckedChange = { addToFullRoutine = it }
+                            )
+                            Text("Add to Full Routine Group")
+                        }
+                    }
                 },
                 confirmButton = {
                     Button(onClick = {
-                        if (newSessionName.isNotBlank()) {
-                            viewModel.addSession(newSessionName)
+                        if (newSessionName.isNotBlank() || addToFullRoutine) {
+                            viewModel.addSession(newSessionName, addToFullRoutine)
                             newSessionName = ""
+                            addToFullRoutine = false
                             showAddDialog = false
                         }
                     }) { Text("Create") }

@@ -10,6 +10,7 @@ import uk.co.fireburn.raiform.ui.screens.archived.ArchivedClientsScreen
 import uk.co.fireburn.raiform.ui.screens.client_details.ClientDetailsScreen
 import uk.co.fireburn.raiform.ui.screens.dashboard.DashboardScreen
 import uk.co.fireburn.raiform.ui.screens.import_flow.ImportScreen
+import uk.co.fireburn.raiform.ui.screens.measurements.ClientMeasurementsScreen
 import uk.co.fireburn.raiform.ui.screens.scheduler.MainSchedulerScreen
 import uk.co.fireburn.raiform.ui.screens.settings.SettingsScreen
 import uk.co.fireburn.raiform.ui.screens.stats.ClientStatsScreen
@@ -18,7 +19,6 @@ import uk.co.fireburn.raiform.ui.screens.stats.ClientStatsScreen
 @Serializable
 object Dashboard
 
-// Update: Added rescheduleSessionId to allow deep-linking into a reschedule dialog
 @Serializable
 data class ClientDetails(val clientId: String, val rescheduleSessionId: String? = null)
 
@@ -30,6 +30,9 @@ object Scheduler
 
 @Serializable
 data class Stats(val clientId: String)
+
+@Serializable
+data class Measurements(val clientId: String)
 
 @Serializable
 object Import
@@ -69,7 +72,9 @@ fun AppNavigation(
                 onNavigateToStats = { clientId ->
                     navController.navigate(Stats(clientId))
                 },
-                // Update: Pass both IDs to navigation
+                onNavigateToMeasurements = { clientId ->
+                    navController.navigate(Measurements(clientId))
+                },
                 onNavigateToClient = { clientId, sessionId ->
                     navController.navigate(ClientDetails(clientId, sessionId))
                 }
@@ -90,6 +95,12 @@ fun AppNavigation(
 
         composable<Stats> {
             ClientStatsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable<Measurements> {
+            ClientMeasurementsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

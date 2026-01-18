@@ -1,6 +1,5 @@
 package uk.co.fireburn.raiform.ui.screens.import_flow
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,10 +21,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -126,34 +125,7 @@ fun ImportScreen(
                 keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() })
             )
 
-            // --- Options Row ---
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { viewModel.toggleSingleSessionMode(!state.isSingleSessionMode) }
-                    .padding(vertical = 8.dp)
-            ) {
-                Checkbox(
-                    checked = state.isSingleSessionMode,
-                    onCheckedChange = { viewModel.toggleSingleSessionMode(it) }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "Merge into one session",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "Combines all headers (Legs, Chest, etc) into a single routine.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            // -------------------------
+            Spacer(modifier = Modifier.height(16.dp))
 
             Button(
                 onClick = { keyboardController?.hide(); viewModel.onParseClicked() },
@@ -175,11 +147,29 @@ fun ImportScreen(
 
             if (state.parsedSessions.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Preview: ${state.parsedClientName}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Preview: ${state.parsedClientName}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (state.measurementCount > 0) {
+                        Icon(
+                            Icons.Default.Straighten,
+                            null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "${state.measurementCount} stats",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
 
                 // Frequency Selector
                 if (state.parsedSessions.size == 1) {
@@ -226,13 +216,6 @@ fun ImportScreen(
                                         tint = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 }
-                            }
-                            if (state.sessionFrequency > 1) {
-                                Text(
-                                    "Will generate: Session 1 to Session ${state.sessionFrequency}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
                             }
                         }
                     }

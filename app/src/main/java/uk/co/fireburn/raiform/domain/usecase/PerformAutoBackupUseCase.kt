@@ -16,7 +16,6 @@ import javax.inject.Inject
 class PerformAutoBackupUseCase @Inject constructor(
     private val repository: RaiRepository,
     private val dataExporter: DataExporter,
-    // Fix: Use @param:ApplicationContext to explicitly target the constructor parameter
     @param:ApplicationContext private val context: Context
 ) {
     suspend operator fun invoke(): Result<String> {
@@ -24,11 +23,17 @@ class PerformAutoBackupUseCase @Inject constructor(
             val clients = repository.getAllClients().first()
             val sessions = repository.getAllSessions().first()
             val allHistoryLogs = repository.getAllHistoryLogs().first()
+            val definitions = repository.getAllExerciseBodyParts().first()
+            val allMeasurements = clients.flatMap { client ->
+                repository.getBodyMeasurements(client.id).first()
+            }
 
             val exportData = ExportData(
                 clients = clients,
                 sessions = sessions,
-                historyLogs = allHistoryLogs
+                historyLogs = allHistoryLogs,
+                bodyMeasurements = allMeasurements,
+                exerciseDefinitions = definitions
             )
 
             // Create filename: RaiForm_AutoBackup_2023-10-27.json

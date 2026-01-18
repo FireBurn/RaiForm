@@ -6,17 +6,23 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import uk.co.fireburn.raiform.data.source.local.RaiFormDatabase
 import uk.co.fireburn.raiform.data.source.local.dao.ClientDao
+import uk.co.fireburn.raiform.data.source.local.dao.ExerciseDefinitionDao
 import uk.co.fireburn.raiform.data.source.local.dao.HistoryDao
+import uk.co.fireburn.raiform.data.source.local.dao.MeasurementDao
 import uk.co.fireburn.raiform.data.source.local.dao.SessionDao
+import uk.co.fireburn.raiform.data.source.local.entity.BodyMeasurementEntity
 import uk.co.fireburn.raiform.data.source.local.entity.ClientEntity
+import uk.co.fireburn.raiform.data.source.local.entity.ExerciseDefinitionEntity
 import uk.co.fireburn.raiform.data.source.local.entity.ExerciseTemplateEntity
 import uk.co.fireburn.raiform.data.source.local.entity.HistoryEntity
 import uk.co.fireburn.raiform.data.source.local.entity.SessionEntity
 import uk.co.fireburn.raiform.data.source.local.entity.SessionExerciseEntity
+import uk.co.fireburn.raiform.domain.model.BodyMeasurement
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.ClientStatus
 import uk.co.fireburn.raiform.domain.model.HistoryLog
@@ -32,6 +38,8 @@ class RaiRepositoryImpl @Inject constructor(
     private val clientDao: ClientDao,
     private val sessionDao: SessionDao,
     private val historyDao: HistoryDao,
+    private val exerciseDefinitionDao: ExerciseDefinitionDao,
+    private val measurementDao: MeasurementDao,
     private val firestore: FirebaseFirestore,
     private val firebaseAuth: FirebaseAuth
 ) : RaiRepository {
@@ -184,6 +192,45 @@ class RaiRepositoryImpl @Inject constructor(
         sessionDao.softDeleteSession(sessionId, System.currentTimeMillis())
     }
 
+    // --- Exercise Definitions (Global Body Parts) ---
+
+    override suspend fun saveExerciseDefinition(name: String, bodyPart: String) {
+        exerciseDefinitionDao.insertDefinition(ExerciseDefinitionEntity(name, bodyPart))
+    }
+
+    override fun getAllExerciseBodyParts(): Flow<Map<String, String>> = flow {
+        // Fetch initially
+        val list = exerciseDefinitionDao.getAllDefinitions()
+        emit(list.associate { it.name to it.bodyPart })
+        // Note: For a truly reactive experience, the DAO should return Flow<List<...>>
+        // This basic implementation fetches once.
+    }
+
+    override suspend fun renameExerciseGlobally(oldName: String, newName: String) {
+        db.withTransaction {
+            // 1. Update the Definition
+            exerciseDefinitionDao.updateName(oldName, newName)
+            // 2. Update all Templates (Historical and Active)
+            sessionDao.updateExerciseNameGlobally(oldName, newName)
+        }
+    }
+
+    // --- Body Measurements ---
+
+    override fun getBodyMeasurements(clientId: String): Flow<List<BodyMeasurement>> {
+        return measurementDao.getMeasurementsForClient(clientId).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+    override suspend fun saveBodyMeasurement(measurement: BodyMeasurement) {
+        measurementDao.insertMeasurement(measurement.toEntity())
+    }
+
+    override suspend fun deleteBodyMeasurement(id: String) {
+        measurementDao.deleteMeasurement(id)
+    }
+
     // --- History ---
 
     override fun getHistoryForClient(clientId: String): Flow<List<HistoryLog>> {
@@ -274,4 +321,30 @@ class RaiRepositoryImpl @Inject constructor(
             e.printStackTrace()
         }
     }
+
+    // --- Mappers ---
+
+    private fun BodyMeasurementEntity.toDomain() = BodyMeasurement(
+        id = id,
+        clientId = clientId,
+        dateRecorded = dateRecorded,
+        weightKg = weightKg,
+        shouldersCm = shouldersCm,
+        armsCm = armsCm,
+        waistCm = waistCm,
+        chestCm = chestCm,
+        legsCm = legsCm
+    )
+
+    private fun BodyMeasurement.toEntity() = BodyMeasurementEntity(
+        id = id,
+        clientId = clientId,
+        dateRecorded = dateRecorded,
+        weightKg = weightKg,
+        shouldersCm = shouldersCm,
+        armsCm = armsCm,
+        waistCm = waistCm,
+        chestCm = chestCm,
+        legsCm = legsCm
+    )
 }

@@ -332,7 +332,6 @@ fun StatusCard(activeCount: Int, nextClientName: String?, nextSessionTime: Strin
     }
 }
 
-// ... ClientCard and EmptyState are the same as previously correct versions
 @Composable
 fun ClientCard(
     client: Client,

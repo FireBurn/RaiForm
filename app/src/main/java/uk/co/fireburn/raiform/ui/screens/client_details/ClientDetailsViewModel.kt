@@ -192,8 +192,15 @@ class ClientDetailsViewModel @Inject constructor(
     }
 
     // Standard CRUD methods
-    fun addSession(name: String) {
-        viewModelScope.launch { manageSessionUseCase.createSession(clientId, name) }
+
+    fun addSession(name: String, addToFullRoutine: Boolean) {
+        viewModelScope.launch {
+            manageSessionUseCase.createSession(
+                clientId,
+                name,
+                addToFullRoutine
+            )
+        }
     }
 
     fun renameSession(session: Session, newName: String) {

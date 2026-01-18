@@ -49,12 +49,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -152,79 +150,103 @@ fun ActiveSessionScreen(
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else {
-            LazyColumn(
+            // Group exercises by Body Part (Alphabetical Keys)
+            val groupedExercises = remember(session.exercises, state.exerciseBodyParts) {
+                session.exercises
+                    .groupBy { state.exerciseBodyParts[it.name] ?: "Other" }
+                    .toSortedMap()
+            }
+
+            // Column handles the sticky top header logic
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(16.dp)
             ) {
-                // 1. Rest Timer Header
-                item {
-                    RestTimerHeader(
-                        isRunning = state.isTimerRunning,
-                        isAlarmRinging = isAlarmRinging,
-                        timeLeft = state.timerValue,
-                        totalTime = state.timerTotalTime,
-                        onStart = {
-                            activeRingtone?.stop()
-                            isAlarmRinging = false
-                            viewModel.startTimer(it)
-                        },
-                        onStop = {
-                            viewModel.stopTimer()
-                            activeRingtone?.stop()
-                            isAlarmRinging = false
-                        }
-                    )
-                }
-
-                // 2. List of Exercises with Headers
-                items(session.exercises, key = { it.id }) { exercise ->
-                    if (exercise.sets == 0 && exercise.reps == 0) {
-                        // Render Section Header
-                        SectionHeader(title = exercise.name)
-                    } else {
-                        // Render Exercise Card
-                        ActiveExerciseCard(
-                            exercise = exercise,
-                            onToggle = { viewModel.toggleExerciseDone(exercise.id) },
-                            onEdit = {
-                                isCreatingNew = false
-                                exerciseInDialog = exercise
-                            },
-                            onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
-                        )
+                // 1. Sticky Rest Timer Header
+                RestTimerHeader(
+                    isRunning = state.isTimerRunning,
+                    isAlarmRinging = isAlarmRinging,
+                    timeLeft = state.timerValue,
+                    totalTime = state.timerTotalTime,
+                    onStart = {
+                        activeRingtone?.stop()
+                        isAlarmRinging = false
+                        viewModel.startTimer(it)
+                    },
+                    onStop = {
+                        viewModel.stopTimer()
+                        activeRingtone?.stop()
+                        isAlarmRinging = false
                     }
-                }
+                )
 
-                item {
-                    Button(
-                        onClick = {
-                            isCreatingNew = true
-                            exerciseInDialog =
-                                Exercise(name = "", sets = 3, reps = 10, weight = 0.0)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("NEW EXERCISE", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 2. Scrollable List of Exercises
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    groupedExercises.forEach { (bodyPart, exercises) ->
+                        // Header
+                        item(key = "header_$bodyPart") {
+                            Text(
+                                text = bodyPart.uppercase(),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+
+                        // Exercises
+                        items(exercises, key = { it.id }) { exercise ->
+                            ActiveExerciseCard(
+                                exercise = exercise,
+                                onToggle = { viewModel.toggleExerciseDone(exercise.id) },
+                                onEdit = {
+                                    isCreatingNew = false
+                                    exerciseInDialog = exercise
+                                },
+                                onToggleMaintain = { viewModel.toggleMaintainWeight(exercise.id) }
+                            )
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                isCreatingNew = true
+                                exerciseInDialog =
+                                    Exercise(name = "", sets = 3, reps = 10, weight = 0.0)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .padding(top = 16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("NEW EXERCISE", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
         if (exerciseInDialog != null) {
+            val currentBodyPart = state.exerciseBodyParts[exerciseInDialog!!.name] ?: "Other"
+
             ExerciseDialog(
                 exercise = exerciseInDialog!!,
+                initialBodyPart = currentBodyPart,
                 isNew = isCreatingNew,
                 allExerciseNames = state.allExerciseNames,
                 preFillData = preFillData,
@@ -233,15 +255,16 @@ fun ActiveSessionScreen(
                     preFillData = null
                 },
                 onNameSelected = { name ->
-                    // Auto-fill trigger
-                    viewModel.getExistingStatsForExercise(name) { w, s, r, bw ->
+                    // Auto-fill logic
+                    viewModel.getExistingStatsForExercise(name) { w, s, r, bw, bp ->
                         preFillData =
                             Exercise(name = name, weight = w, sets = s, reps = r, isBodyweight = bw)
+                        // Trigger re-render with new body part preference is handled by Dialog internal state
                     }
                 },
-                onConfirm = { name, weight, isBodyweight, sets, reps ->
+                onConfirm = { name, weight, isBodyweight, sets, reps, bodyPart ->
                     if (isCreatingNew) {
-                        viewModel.addExercise(name, weight, isBodyweight, sets, reps)
+                        viewModel.addExercise(name, weight, isBodyweight, sets, reps, bodyPart)
                     } else {
                         viewModel.updateExerciseValues(
                             exerciseInDialog!!.id,
@@ -249,7 +272,8 @@ fun ActiveSessionScreen(
                             weight,
                             isBodyweight,
                             sets,
-                            reps
+                            reps,
+                            bodyPart
                         )
                     }
                     exerciseInDialog = null
@@ -388,64 +412,19 @@ fun RestTimerHeader(
             }
         }
     } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        Button(
+            onClick = { onStart(60) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = MaterialTheme.shapes.medium,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         ) {
-            Button(
-                onClick = { onStart(60) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Text("1 MIN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-
-            Button(
-                onClick = { onStart(120) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Text("2 MINS", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
+            Text("1 MIN REST", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
     }
 }
 
@@ -545,11 +524,12 @@ fun ActiveExerciseCard(
 @Composable
 fun ExerciseDialog(
     exercise: Exercise,
+    initialBodyPart: String,
     isNew: Boolean,
     allExerciseNames: List<String>,
     preFillData: Exercise? = null,
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, Boolean, Int, Int) -> Unit,
+    onConfirm: (String, Double, Boolean, Int, Int, String) -> Unit,
     onDelete: () -> Unit,
     onNameSelected: (String) -> Unit
 ) {
@@ -559,7 +539,21 @@ fun ExerciseDialog(
     var setsText by remember { mutableStateOf(exercise.sets.toString()) }
     var repsText by remember { mutableStateOf(exercise.reps.toString()) }
     var isBodyweight by remember { mutableStateOf(exercise.isBodyweight) }
+    var bodyPart by remember { mutableStateOf(initialBodyPart) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    // Hardcoded List of standard body parts
+    val bodyParts = listOf(
+        "Legs",
+        "Chest",
+        "Back",
+        "Shoulders",
+        "Biceps",
+        "Triceps",
+        "Abs & Core",
+        "Cardio",
+        "Other"
+    )
 
     // Auto-fill logic
     LaunchedEffect(preFillData) {
@@ -568,11 +562,13 @@ fun ExerciseDialog(
             setsText = it.sets.toString()
             repsText = it.reps.toString()
             isBodyweight = it.isBodyweight
-            // Name is already set by the selection
+            // Note: nameText is updated via the onNameSelected callback logic if needed
         }
     }
 
     var expanded by remember { mutableStateOf(false) }
+    var bodyPartExpanded by remember { mutableStateOf(false) }
+
     val filteredOptions = remember(nameText, allExerciseNames) {
         if (nameText.isBlank()) emptyList()
         else allExerciseNames.filter {
@@ -602,7 +598,7 @@ fun ExerciseDialog(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-                    // Exposed Dropdown Menu Box
+                    // 1. Exercise Name Dropdown
                     ExposedDropdownMenuBox(
                         expanded = expanded,
                         onExpandedChange = { expanded = !expanded }
@@ -617,14 +613,12 @@ fun ExerciseDialog(
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(
-                                    ExposedDropdownMenuAnchorType.PrimaryEditable,
-                                    true
-                                ),
+                                .menuAnchor(),
                             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                         )
 
-                        if (filteredOptions.isNotEmpty()) {
+                        // Show filtered options OR "New" option
+                        if (filteredOptions.isNotEmpty() || nameText.isNotBlank()) {
                             ExposedDropdownMenu(
                                 expanded = expanded,
                                 onDismissRequest = { expanded = false }
@@ -639,10 +633,55 @@ fun ExerciseDialog(
                                         }
                                     )
                                 }
+                                // If exact match doesn't exist, show "Create New" style option
+                                if (filteredOptions.none {
+                                        it.equals(
+                                            nameText,
+                                            true
+                                        )
+                                    } && nameText.isNotBlank()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Use '$nameText'") },
+                                        onClick = { expanded = false }
+                                    )
+                                }
                             }
                         }
                     }
 
+                    // 2. Body Part Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = bodyPartExpanded,
+                        onExpandedChange = { bodyPartExpanded = !bodyPartExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = bodyPart,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Body Part") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bodyPartExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = bodyPartExpanded,
+                            onDismissRequest = { bodyPartExpanded = false }
+                        ) {
+                            bodyParts.forEach { part ->
+                                DropdownMenuItem(
+                                    text = { Text(part) },
+                                    onClick = {
+                                        bodyPart = part
+                                        bodyPartExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // 3. Weight/Sets/Reps
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -710,7 +749,7 @@ fun ExerciseDialog(
                     val s = setsText.toIntOrNull() ?: 0
                     val r = repsText.toIntOrNull() ?: 0
                     if (nameText.isNotBlank()) {
-                        onConfirm(nameText, finalWeight, isBodyweight, s, r)
+                        onConfirm(nameText, finalWeight, isBodyweight, s, r, bodyPart)
                     }
                 }) { Text("SAVE") }
             },

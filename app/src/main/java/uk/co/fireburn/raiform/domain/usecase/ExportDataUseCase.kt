@@ -13,15 +13,29 @@ class ExportDataUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(outputUri: Uri): Result<Unit> {
         return try {
+            // 1. Fetch Core Data
             val clients = repository.getAllClients().first()
             val sessions = repository.getAllSessions().first()
-            val allHistoryLogs = repository.getAllHistoryLogs().first() // Use the new method
+            val allHistoryLogs = repository.getAllHistoryLogs().first()
 
+            // 2. Fetch Global Exercise Definitions (Body Parts)
+            val definitions = repository.getAllExerciseBodyParts().first()
+
+            // 3. Fetch Body Measurements (Iterate clients to gather all)
+            val allMeasurements = clients.flatMap { client ->
+                repository.getBodyMeasurements(client.id).first()
+            }
+
+            // 4. Construct Export Object
             val exportData = ExportData(
                 clients = clients,
                 sessions = sessions,
-                historyLogs = allHistoryLogs
+                historyLogs = allHistoryLogs,
+                bodyMeasurements = allMeasurements,
+                exerciseDefinitions = definitions
             )
+
+            // 5. Write to file
             dataExporter.exportToJson(exportData, outputUri)
             Result.success(Unit)
         } catch (e: Exception) {

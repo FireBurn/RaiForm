@@ -67,6 +67,9 @@ fun ClientStatsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    // Measurement Types Constants
+    val measurementTypes = listOf("Body Weight", "Waist", "Chest", "Arms", "Legs", "Shoulders")
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,7 +121,7 @@ fun ClientStatsScreen(
                     }
                 }
 
-                // 3. Progress Graph
+                // 3. Progress Graph (Exercises + Measurements)
                 item {
                     Text(
                         "Progress Over Time",
@@ -127,33 +130,55 @@ fun ClientStatsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    if (state.exerciseNames.isNotEmpty()) {
-                        ExerciseSelector(
-                            exercises = state.exerciseNames,
-                            selected = state.selectedGraphExercise,
-                            onSelect = { viewModel.selectGraphExercise(it) }
-                        )
-                        Spacer(Modifier.height(16.dp))
+                    // Combine Exercises and Body Measurements for the dropdown
+                    val allGraphOptions = measurementTypes + state.exerciseNames
 
-                        val dataPoints = state.graphData[state.selectedGraphExercise] ?: emptyList()
-                        if (dataPoints.size >= 2) {
-                            ProgressChart(dataPoints)
+                    // Determine current selection (Default to Body Weight if no exercise selected)
+                    val currentSelection = state.selectedGraphExercise ?: "Body Weight"
+
+                    GraphSelector(
+                        options = allGraphOptions,
+                        selected = currentSelection,
+                        onSelect = { viewModel.selectGraphExercise(it) }
+                    )
+                    Spacer(Modifier.height(16.dp))
+
+                    // Determine Data Points based on selection
+                    val graphPoints: List<Pair<Long, Double>> =
+                        if (measurementTypes.contains(currentSelection)) {
+                            // Extract Measurement Data
+                            state.bodyMeasurements.mapNotNull { m ->
+                                val value = when (currentSelection) {
+                                    "Body Weight" -> m.weightKg
+                                    "Waist" -> m.waistCm
+                                    "Chest" -> m.chestCm
+                                    "Arms" -> m.armsCm
+                                    "Legs" -> m.legsCm
+                                    "Shoulders" -> m.shouldersCm
+                                    else -> null
+                                }
+                                if (value != null) m.dateRecorded to value else null
+                            }.sortedBy { it.first }
                         } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                        RoundedCornerShape(12.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("Need at least 2 logs to show graph", color = Color.Gray)
-                            }
+                            // Extract Exercise Data
+                            state.graphData[currentSelection] ?: emptyList()
                         }
+
+                    if (graphPoints.size >= 2) {
+                        ProgressChart(graphPoints, label = currentSelection)
                     } else {
-                        Text("No data available yet.", color = Color.Gray)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    RoundedCornerShape(12.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Need at least 2 data points to show graph", color = Color.Gray)
+                        }
                     }
                 }
             }
@@ -161,7 +186,6 @@ fun ClientStatsScreen(
     }
 }
 
-// ... FunFactCard, PBCard remain same ...
 @Composable
 fun FunFactCard(totalVolume: Double, totalReps: Int, fact: String) {
     Card(
@@ -229,9 +253,9 @@ fun PBCard(pb: PersonalBest) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExerciseSelector(
-    exercises: List<String>,
-    selected: String?,
+fun GraphSelector(
+    options: List<String>,
+    selected: String,
     onSelect: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -241,23 +265,24 @@ fun ExerciseSelector(
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = selected ?: "Select Exercise",
+            value = selected,
             onValueChange = {},
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true)
-                .fillMaxWidth()
+                .fillMaxWidth(),
+            label = { Text("Select Metric") }
         )
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            exercises.forEach { exercise ->
+            options.forEach { option ->
                 DropdownMenuItem(
-                    text = { Text(exercise) },
+                    text = { Text(option) },
                     onClick = {
-                        onSelect(exercise)
+                        onSelect(option)
                         expanded = false
                     }
                 )
@@ -267,7 +292,7 @@ fun ExerciseSelector(
 }
 
 @Composable
-fun ProgressChart(data: List<Pair<Long, Double>>) {
+fun ProgressChart(data: List<Pair<Long, Double>>, label: String) {
     val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
 
@@ -302,7 +327,7 @@ fun ProgressChart(data: List<Pair<Long, Double>>) {
         },
         update = { chart ->
             val entries = data.map { Entry(it.first.toFloat(), it.second.toFloat()) }
-            val dataSet = LineDataSet(entries, "Progress").apply {
+            val dataSet = LineDataSet(entries, label).apply {
                 color = primaryColor
                 valueTextColor = textColor
                 lineWidth = 2f

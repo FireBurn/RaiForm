@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uk.co.fireburn.raiform.domain.model.BodyMeasurement
 import uk.co.fireburn.raiform.domain.model.Client
 import uk.co.fireburn.raiform.domain.model.Session
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
@@ -19,8 +20,8 @@ data class ImportUiState(
     val rawText: String = "",
     val parsedClientName: String? = null,
     val parsedSessions: List<Session> = emptyList(),
+    val measurementCount: Int = 0, // Visual feedback for measurements
     val sessionFrequency: Int = 1,
-    val isSingleSessionMode: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val isSaved: Boolean = false
@@ -39,27 +40,20 @@ class ImportViewModel @Inject constructor(
         _uiState.update { it.copy(rawText = text, error = null) }
     }
 
-    // Toggle handler
-    fun toggleSingleSessionMode(isEnabled: Boolean) {
-        _uiState.update { it.copy(isSingleSessionMode = isEnabled) }
-    }
-
     fun onParseClicked() {
         val text = _uiState.value.rawText
-        val combine = _uiState.value.isSingleSessionMode
-
         if (text.isBlank()) {
             _uiState.update { it.copy(error = "Please paste text first.") }
             return
         }
 
         try {
-            // Pass the combine flag to preview
-            val result = importLegacyNoteUseCase.preview(text, combine)
+            val result = importLegacyNoteUseCase.preview(text)
             _uiState.update {
                 it.copy(
                     parsedClientName = result.clientName,
                     parsedSessions = result.sessions,
+                    measurementCount = result.measurements.size,
                     sessionFrequency = 1,
                     error = null
                 )
@@ -84,7 +78,6 @@ class ImportViewModel @Inject constructor(
     fun onSaveClicked() {
         val text = _uiState.value.rawText
         val frequency = _uiState.value.sessionFrequency
-        val combine = _uiState.value.isSingleSessionMode
 
         if (text.isBlank()) return
 
@@ -92,21 +85,58 @@ class ImportViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
 
             try {
-                // 1. Get parsed result (re-parsing ensures state consistency)
-                val parseResult = importLegacyNoteUseCase.preview(text, combine)
+                // 1. Get Parse Result
+                val parseResult = importLegacyNoteUseCase.preview(text)
 
-                // 2. Create and Save Client
+                // 2. Save Client
                 val client = Client(name = parseResult.clientName)
                 repository.saveClient(client)
 
-                // 3. Handle Sessions logic
+                // 3. Save Body Parts (Global)
+                parseResult.exerciseBodyParts.forEach { (name, bodyPart) ->
+                    repository.saveExerciseDefinition(name, bodyPart)
+                }
+
+                // 4. Save Measurements (Flattened)
+                if (parseResult.measurements.isNotEmpty()) {
+                    var weight: Double? = null
+                    var waist: Double? = null
+                    var chest: Double? = null
+                    var arms: Double? = null
+                    var legs: Double? = null
+                    var shoulders: Double? = null
+
+                    parseResult.measurements.forEach { raw ->
+                        when {
+                            raw.type.contains("Weight", true) -> weight = raw.value
+                            raw.type.contains("Waist", true) -> waist = raw.value
+                            raw.type.contains("Chest", true) -> chest = raw.value
+                            raw.type.contains("Arm", true) -> arms = raw.value
+                            raw.type.contains("Leg", true) -> legs = raw.value
+                            raw.type.contains("Shoulder", true) -> shoulders = raw.value
+                        }
+                    }
+
+                    val measurement = BodyMeasurement(
+                        clientId = client.id,
+                        dateRecorded = System.currentTimeMillis(),
+                        weightKg = weight,
+                        waistCm = waist,
+                        chestCm = chest,
+                        armsCm = arms,
+                        legsCm = legs,
+                        shouldersCm = shoulders
+                    )
+                    repository.saveBodyMeasurement(measurement)
+                }
+
+                // 5. Handle Sessions (Replication)
                 if (parseResult.sessions.size == 1 && frequency > 1) {
-                    // Logic: Replicate the single session X times
                     val baseSession = parseResult.sessions.first()
                     val groupId = UUID.randomUUID().toString()
 
                     for (i in 1..frequency) {
-                        val sessionName = if (combine) "Full Routine $i" else "Session $i"
+                        val sessionName = "Session $i"
                         val newSession = baseSession.copy(
                             id = UUID.randomUUID().toString(),
                             clientId = client.id,
@@ -131,9 +161,5 @@ class ImportViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, error = "Save Error: ${e.message}") }
             }
         }
-    }
-
-    fun resetState() {
-        _uiState.value = ImportUiState()
     }
 }

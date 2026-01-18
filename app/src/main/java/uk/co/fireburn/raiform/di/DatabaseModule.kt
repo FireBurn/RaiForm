@@ -9,7 +9,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import uk.co.fireburn.raiform.data.source.local.RaiFormDatabase
 import uk.co.fireburn.raiform.data.source.local.dao.ClientDao
+import uk.co.fireburn.raiform.data.source.local.dao.ExerciseDefinitionDao
 import uk.co.fireburn.raiform.data.source.local.dao.HistoryDao
+import uk.co.fireburn.raiform.data.source.local.dao.MeasurementDao
 import uk.co.fireburn.raiform.data.source.local.dao.SessionDao
 import javax.inject.Singleton
 
@@ -30,7 +32,8 @@ class DatabaseModule {
             .addMigrations(
                 RaiFormDatabase.MIGRATION_1_3,
                 RaiFormDatabase.MIGRATION_2_3,
-                RaiFormDatabase.MIGRATION_3_4
+                RaiFormDatabase.MIGRATION_3_4,
+                RaiFormDatabase.MIGRATION_4_5
             )
             .build()
     }
@@ -51,5 +54,17 @@ class DatabaseModule {
     @Singleton
     fun provideHistoryDao(database: RaiFormDatabase): HistoryDao {
         return database.historyDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideExerciseDefinitionDao(database: RaiFormDatabase): ExerciseDefinitionDao {
+        return database.exerciseDefinitionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideMeasurementDao(database: RaiFormDatabase): MeasurementDao {
+        return database.measurementDao()
     }
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uk.co.fireburn.raiform.domain.model.BodyMeasurement
 import uk.co.fireburn.raiform.domain.repository.RaiRepository
 import javax.inject.Inject
 
@@ -25,9 +26,10 @@ data class StatsUiState(
     val totalReps: Int = 0,
     val funFact: String = "",
     val personalBests: List<PersonalBest> = emptyList(),
-    val graphData: Map<String, List<Pair<Long, Double>>> = emptyMap(), // Exercise -> List of (Date, Weight)
+    val graphData: Map<String, List<Pair<Long, Double>>> = emptyMap(),
     val exerciseNames: List<String> = emptyList(),
     val selectedGraphExercise: String? = null,
+    val bodyMeasurements: List<BodyMeasurement> = emptyList(),
     val isLoading: Boolean = true
 )
 
@@ -47,11 +49,12 @@ class ClientStatsViewModel @Inject constructor(
 
     private fun loadStats() {
         viewModelScope.launch {
-            // Combine History (Past weeks) AND Active Sessions (This week)
+            // Combine History, Active Sessions, AND Body Measurements
             combine(
                 repository.getHistoryForClient(clientId),
-                repository.getSessionsForClient(clientId)
-            ) { historyLogs, activeSessions ->
+                repository.getSessionsForClient(clientId),
+                repository.getBodyMeasurements(clientId)
+            ) { historyLogs, activeSessions, measurements ->
 
                 // 1. Process Historical Data
                 val historyExercises = historyLogs.flatMap { log ->
@@ -60,21 +63,18 @@ class ClientStatsViewModel @Inject constructor(
                     }
                 }
 
-                // 2. Process Active Data (Current week's checked items)
-                // We use the lastResetTimestamp or current time if it's a new session
+                // 2. Process Active Data
                 val activeExercises = activeSessions.flatMap { session ->
                     session.exercises.filter { it.isDone }.map { exercise ->
-                        // If the session hasn't been reset yet (new), use current time for the graph
                         val date =
                             if (session.lastResetTimestamp > 0) session.lastResetTimestamp else System.currentTimeMillis()
                         exercise to date
                     }
                 }
 
-                // Merge both lists
                 val allExercisesWithDate = historyExercises + activeExercises
 
-                // 3. Total Volume & Reps
+                // 3. Stats Calculations
                 var volume = 0.0
                 var reps = 0
                 allExercisesWithDate.forEach { (ex, _) ->
@@ -88,7 +88,6 @@ class ClientStatsViewModel @Inject constructor(
                 val pbs = allExercisesWithDate
                     .groupBy { it.first.name.trim().lowercase() }
                     .mapNotNull { (_, list) ->
-                        // Find max weight
                         val maxEntry = list.maxByOrNull { it.first.weight }
                         maxEntry?.let { (ex, date) ->
                             PersonalBest(ex.name, ex.weight, ex.isBodyweight, date)
@@ -106,7 +105,6 @@ class ClientStatsViewModel @Inject constructor(
 
                 val exerciseList = graphMap.keys.sorted()
 
-                // Preserve selected exercise if it still exists, otherwise pick first
                 val currentSelection = _uiState.value.selectedGraphExercise
                 val newSelection =
                     if (currentSelection in exerciseList) currentSelection else exerciseList.firstOrNull()
@@ -119,6 +117,7 @@ class ClientStatsViewModel @Inject constructor(
                     graphData = graphMap,
                     exerciseNames = exerciseList,
                     selectedGraphExercise = newSelection,
+                    bodyMeasurements = measurements, // Pass measurements to UI
                     isLoading = false
                 )
             }.collect { newState ->
